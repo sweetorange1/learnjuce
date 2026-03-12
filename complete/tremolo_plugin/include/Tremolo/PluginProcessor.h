@@ -35,6 +35,9 @@ public:
 
   [[nodiscard]] Parameters& getParameterRefs() noexcept;
   juce::AudioProcessorParameter* getBypassParameter() const noexcept override;
+  
+  // 获取Tremolo实例（用于指示灯控制）
+  Tremolo& getTremolo() noexcept { return tremolo; }
 
   /**
    *

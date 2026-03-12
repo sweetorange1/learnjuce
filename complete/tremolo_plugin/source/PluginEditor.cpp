@@ -67,6 +67,17 @@ void XYController::paint(juce::Graphics& g) {
     g.setColour(juce::Colour(0xFF888888));
     g.drawRect(bounds, 2.0f);
     
+    // 目标点坐标（与Tremolo.h中保持一致）
+    constexpr float targetX = 0.5f;
+    constexpr float targetY = 0.38f;
+    
+    // 绘制目标点标记（绿色十字）
+    float targetXPos = targetX * bounds.getWidth();
+    float targetYPos = targetY * bounds.getHeight();
+    g.setColour(juce::Colours::green);
+    g.drawLine(targetXPos - 8.0f, targetYPos, targetXPos + 8.0f, targetYPos, 2.0f);
+    g.drawLine(targetXPos, targetYPos - 8.0f, targetXPos, targetYPos + 8.0f, 2.0f);
+    
     // 计算当前位置
     float xPos = xValue * bounds.getWidth();
     float yPos = yValue * bounds.getHeight();
@@ -79,9 +90,14 @@ void XYController::paint(juce::Graphics& g) {
     g.setColour(juce::Colours::black);
     g.drawEllipse(xPos - 5.0f, yPos - 5.0f, 10.0f, 10.0f, 2.0f);
     
-    // 在右下角显示X和Y值
+    // 计算距离和增益信息
+    const auto distanceToTarget = std::sqrt(std::pow(xValue - targetX, 2.0f) + std::pow(yValue - targetY, 2.0f));
+    const auto gainBoost = juce::jmap(distanceToTarget, 0.0f, std::sqrt(0.5f), 4.0f, 1.0f);
+    
+    // 在右下角显示X和Y值以及增益信息
     juce::String valueText = juce::String("X: ") + juce::String(xValue, 2) + 
-                            juce::String(" Y: ") + juce::String(yValue, 2);
+                            juce::String(" Y: ") + juce::String(yValue, 2) +
+                            juce::String("\nGain: ") + juce::String(gainBoost, 2) + "x";
     
     // 设置字体和颜色
     g.setFont(juce::Font(14.0f));
@@ -101,6 +117,8 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     : AudioProcessorEditor(&p),
       // bypassAttachment：将旁路参数与按钮绑定
       bypassAttachment{p.getParameterRefs().bypassed, bypassButton},
+      // gainAttachment：将增益参数与控制条绑定
+      gainAttachment{p.getParameterRefs().gain, gainSlider},
       // about：关于信息组件，显示插件信息
       about{*this, logo,
             // 字符串拼接：使用预定义宏组合插件信息
@@ -146,6 +164,35 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   // 将旁路按钮添加到界面
   addAndMakeVisible(bypassButton);
 
+  // 设置增益标签
+  gainLabel.setJustificationType(juce::Justification::centred);
+  gainLabel.setMinimumHorizontalScale(1.f);
+  gainLabel.setFont(lookAndFeel.getSideLabelsFont());
+  gainLabel.setColour(juce::Label::textColourId, sideFontColor);
+  gainLabel.setText("MAX GAIN", juce::dontSendNotification); // 明确表示是最大增益
+  addAndMakeVisible(gainLabel);
+
+  // 设置增益控制条
+  gainSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  gainSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
+  gainSlider.setRange(0.1, 10.0, 0.1); // 增益范围从0.1到10.0，步进0.1
+  gainSlider.setValue(1.0); // 默认增益为1.0
+  addAndMakeVisible(gainSlider);
+
+  // // 设置指示灯标签
+  // indicatorLabel.setJustificationType(juce::Justification::centred);
+  // indicatorLabel.setMinimumHorizontalScale(1.f);
+  // indicatorLabel.setFont(lookAndFeel.getSideLabelsFont());
+  // indicatorLabel.setColour(juce::Label::textColourId, sideFontColor);
+  // indicatorLabel.setText("PEAK", juce::dontSendNotification);
+  // addAndMakeVisible(indicatorLabel);
+
+  // 设置指示灯组件
+  indicatorLight.setInterceptsMouseClicks(false, false); // 不接收鼠标事件
+  addAndMakeVisible(indicatorLight);
+
+  // 绑定增益参数（在成员初始化列表中初始化）
+
   // 设置XY控制器的值变化回调函数
   xyController.setValueChangeCallback([&p](float x, float y) {
     // 更新音频处理器的X和Y参数值
@@ -155,6 +202,9 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   
   // 将XY控制器添加到界面
   addAndMakeVisible(xyController);
+
+  // 启动定时器用于更新指示灯状态（每秒30帧）
+  startTimerHz(30);
 
   // 设置自定义外观：将lookAndFeel对象设置为当前组件的外观
   setLookAndFeel(&lookAndFeel);
@@ -172,10 +222,28 @@ PluginEditor::~PluginEditor() {
   setLookAndFeel(nullptr);
 }
 
+// timerCallback方法：定时器回调，用于更新指示灯状态
+void PluginEditor::timerCallback() {
+    // 获取音频处理器引用（使用基类的processor成员）
+    auto& audioProcessor = dynamic_cast<PluginProcessor&>(processor);
+    
+    // 更新指示灯状态（deltaTime = 1/30秒）
+    audioProcessor.getTremolo().updateIndicatorState(1.0f / 30.0f);
+    
+    // 更新指示灯组件的闪烁状态
+    indicatorLight.setFlashing(audioProcessor.getTremolo().shouldFlashIndicator());
+}
+
+// paint方法：绘制编辑器背景
+void PluginEditor::paint(juce::Graphics& g) {
+    // 调用基类的paint方法
+    AudioProcessorEditor::paint(g);
+}
+
 // resized方法：当组件大小改变时自动调用，用于重新布局子组件
 void PluginEditor::resized() {
   // 获取组件的本地边界（相对于父组件的坐标和大小）
-  const auto bounds = getLocalBounds();
+  auto bounds = getLocalBounds();
 
   // 设置背景图片覆盖整个边界
   background.setBounds(bounds);
@@ -183,8 +251,19 @@ void PluginEditor::resized() {
   // // 设置Logo的位置和大小：左上角(16,16)，宽105，高24
   // logo.setBounds({16, 16, 105, 24});
 
-  // 计算XY控制器的边界：正方形，位于界面中央，大小为300x300像素
-  auto xyBounds = bounds.withSizeKeepingCentre(600, 600);
+  // 计算增益控制区域的边界：顶部区域，高度80像素
+  auto gainArea = bounds.removeFromTop(40);
+  
+  // 设置增益标签：左侧，宽度60像素
+  auto gainLabelBounds = gainArea.removeFromLeft(60);
+  gainLabel.setBounds(gainLabelBounds);
+  
+  // 设置增益控制条：剩余区域，左右留出20像素边距
+  gainArea.reduce(20, 0);
+  gainSlider.setBounds(gainArea);
+
+  // 计算XY控制器的边界：正方形，位于界面中央向上150像素，大小为600x600像素
+  auto xyBounds = bounds.withSizeKeepingCentre(600, 600).translated(0, -20);
   xyController.setBounds(xyBounds);
 
   // 计算旁路按钮的边界：右上角区域
@@ -202,6 +281,19 @@ void PluginEditor::resized() {
   bypassLabelBounds.removeFromBottom(206);
   bypassLabelBounds.removeFromLeft(396);
   bypassLabel.setBounds(bypassLabelBounds);
+
+  // 计算指示灯区域的边界：顶部区域，在增益控制条下方
+  auto indicatorArea = bounds.removeFromTop(120);
+  indicatorArea.removeFromTop(80); // 移除增益控制区域
+  
+  // 设置指示灯标签：左侧，宽度60像素
+  auto indicatorLabelBounds = indicatorArea.removeFromLeft(60);
+  indicatorLabel.setBounds(indicatorLabelBounds);
+  
+  // 设置指示灯：右侧，圆形，直径40像素
+  auto indicatorLightBounds = indicatorArea.removeFromRight(60);
+  indicatorLightBounds = indicatorLightBounds.withSizeKeepingCentre(40, 40);
+  indicatorLight.setBounds(indicatorLightBounds);
 }
 
 // 命名空间结束

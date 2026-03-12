@@ -1,195 +1,159 @@
 #pragma once
+#include <juce_dsp/juce_dsp.h>
 
 namespace tremolo {
-enum class ApplySmoothing { no, yes };
 
+// 颤音效果器主类（简化版，只保留增益和clipper效果）
 class Tremolo {
 public:
-  enum class LfoWaveform : size_t {
-    sine = 0,
-    triangle = 1,
-  };
+  // 构造函数
+  Tremolo() = default;
 
-  Tremolo() { setModulationRateHz(5.f, ApplySmoothing::no); }
-
+  // 准备音频处理环境（添加滤波器初始化）
   void prepare(double sampleRate, int expectedMaxFramesPerBlock) {
-    const juce::dsp::ProcessSpec processSpec{
-        .sampleRate = sampleRate,
-        .maximumBlockSize =
-            static_cast<juce::uint32>(expectedMaxFramesPerBlock),
-        .numChannels = 1u,
-    };
-    for (auto& lfo : lfos) {
-      lfo.prepare(processSpec);
-    }
-    lfoSampleFifo.prepare(sampleRate);
-    lfoTransitionSmoother.reset(sampleRate, 0.025 /* 25 milliseconds */);
-
-    // allocate defensively
-    lfoSamples.resize(4u * static_cast<size_t>(expectedMaxFramesPerBlock));
+    // 初始化低通和高通滤波器
+    lowPassFilter.setCoefficients(juce::IIRCoefficients::makeLowPass(sampleRate, 24000.0f));
+    highPassFilter.setCoefficients(juce::IIRCoefficients::makeHighPass(sampleRate, 100.0f));
+    
+    // 重置滤波器状态
+    lowPassFilter.reset();
+    highPassFilter.reset();
+    
+    // 重置电平检测器
+    peakLevel = 0.0f;
+    isFlashing = false;
+    flashTimer = 0.0f;
   }
 
-  void setModulationRateHz(
-      float rateHz,
-      ApplySmoothing applySmoothing = ApplySmoothing::yes) noexcept {
-    const auto force = applySmoothing == ApplySmoothing::no;
-    for (auto& lfo : lfos) {
-      lfo.setFrequency(rateHz, force);
-    }
-  }
-
-  void setLfoWaveform(LfoWaveform waveform,
-                      ApplySmoothing applySmoothing = ApplySmoothing::yes) {
-    jassert(waveform == LfoWaveform::sine || waveform == LfoWaveform::triangle);
-
-    lfoToSet = waveform;
-
-    if (applySmoothing == ApplySmoothing::no) {
-      currentLfo = waveform;
-    }
-  }
-
+  // 设置XY控制器的值
   void setXYValues(float x, float y) noexcept {
-    xValue = x;
-    yValue = y;
-    // 根据X和Y值调整调制参数
-    // X值可以控制调制深度，Y值可以控制调制频率
-    dynamicModulationDepth = juce::jmap(x, 0.0f, 1.0f, 0.1f, 0.8f);
-    dynamicModulationRate = juce::jmap(y, 0.0f, 1.0f, 0.5f, 20.0f);
+    xValue = x;  // 当前X值
+    yValue = y;  // 当前Y值
+    
+    // 根据XY位置计算增益（距离中心点越近，增益越大）
+    constexpr float targetX = 0.5f;  // 目标点X坐标
+    constexpr float targetY = 0.38f;  // 目标点Y坐标
+    
+    // 计算到目标点的距离
+    const auto distanceToTarget = std::sqrt(std::pow(x - targetX, 2.0f) + std::pow(y - targetY, 2.0f));
+    
+    // 将距离映射到增益（maxGain到1.0）
+    gainBoost = juce::jmap(distanceToTarget, 0.0f, std::sqrt(0.5f), maxGain, 1.0f);
   }
 
+  // 设置最大增益值
+  void setMaxGain(float maxGainValue) noexcept {
+    maxGain = maxGainValue;  // 设置最大增益值
+  }
+
+  // 主音频处理函数（添加信号拆分和电平检测）
   void process(juce::AudioBuffer<float>& buffer) noexcept {
-    // actual updating of the LFO waveform happens in process()
-    // to keep setLfoWaveform() idempotent
-    updateLfoWaveform();
+    // Clipper阈值参数
+    constexpr float thresholdHigh = 1.0f;   // 软削波上限阈值
+    constexpr float thresholdLow = -1.0f;   // 负向阈值
 
-    // for each frame
+    // 处理每个音频帧
     for (const auto frameIndex : std::views::iota(0, buffer.getNumSamples())) {
-      // generate the LFO value
-      const auto lfoValue = getNextLfoValue();
-      lfoSampleFifo.push(lfoValue);
-
-      // calculate the modulation value using dynamic parameters from XY controller
-      const auto modulationValue = dynamicModulationDepth * lfoValue + 1.f;
-
-      // calculate volume attenuation based on XY distance from center (0.5, 0.5)
-      const auto centerDistance = std::sqrt(std::pow(xValue - 0.5f, 2.0f) + std::pow(yValue - 0.5f, 2.0f));
-      // map distance (0 to sqrt(0.5)) to volume (1.0 to 0.0)
-      const auto volumeAttenuation = juce::jmap(centerDistance, 0.0f, std::sqrt(0.5f), 1.0f, 0.0f);
-
-      for (const auto channelIndex :
-           std::views::iota(0, buffer.getNumChannels())) {
-        // get the input sample
+      // 处理每个通道
+      for (const auto channelIndex : std::views::iota(0, buffer.getNumChannels())) {
+        // 获取输入样本
         const auto inputSample = buffer.getSample(channelIndex, frameIndex);
 
-        // modulate the sample
-        const auto modulatedSample = modulationValue * inputSample;
+        // === 信号拆分和电平检测 ===
+        // 复制输入信号用于检测（不传回宿主）
+        const auto detectionSample = inputSample;
         
-        // apply volume attenuation based on XY distance
-        const auto outputSample = modulatedSample * volumeAttenuation;
+        // 应用低通滤波器
+        const auto lowPassed = lowPassFilter.processSingleSampleRaw(detectionSample);
+        
+        // 应用高通滤波器
+        const auto filteredSample = highPassFilter.processSingleSampleRaw(lowPassed);
+        
+        // 计算峰值电平（绝对值）
+        const auto absSample = std::abs(filteredSample);
+        if (absSample > peakLevel) {
+          peakLevel = absSample;
+        }
 
-        // set the output sample
-        buffer.setSample(channelIndex, frameIndex, outputSample);
+        // === 主信号处理 ===
+        // 应用增益提升（基于XY控制器位置）
+        const auto boostedSample = inputSample * gainBoost;
+        
+        // 应用Clipper算法（硬限制）防止削波失真
+        const auto clippedSample = juce::jlimit(thresholdLow, thresholdHigh, boostedSample);
+
+        // 设置输出样本
+        buffer.setSample(channelIndex, frameIndex, clippedSample);
+      }
+    }
+    
+    // 电平检测和指示灯控制
+    updateLevelDetection();
+  }
+
+  // 重置所有状态
+  void reset() noexcept {
+    lowPassFilter.reset();
+    highPassFilter.reset();
+    peakLevel = 0.0f;
+    isFlashing = false;
+    flashTimer = 0.0f;
+  }
+
+  // 获取当前电平检测状态（用于指示灯）
+  bool shouldFlashIndicator() const noexcept {
+    return isFlashing;
+  }
+
+  // 更新指示灯状态（需要在音频线程外调用）
+  void updateIndicatorState(float deltaTime) noexcept {
+    if (isFlashing) {
+      flashTimer -= deltaTime;
+      if (flashTimer <= 0.0f) {
+        isFlashing = false;
+        flashTimer = 0.0f;
       }
     }
   }
 
-  void processChannelwise(juce::AudioBuffer<float>& buffer) noexcept {
-    // LFO波形的实际更新在process()中进行
-    // 以保持setLfoWaveform()的幂等性
-    updateLfoWaveform();
-
-    const auto samplesToProcess = std::min(
-        lfoSamples.size(), static_cast<size_t>(buffer.getNumSamples()));
-
-    // 检测主机是否行为异常；如果此断言失败，则表示处理帧数超过了prepare()中声明的数量
-    jassert(samplesToProcess <= lfoSamples.size());
-
-    // 生成LFO信号
-    for (const auto i : std::views::iota(0u, samplesToProcess)) {
-      lfoSamples[i] = getNextLfoValue();
-      lfoSampleFifo.push(lfoSamples[i]);
+private:
+  // 电平检测逻辑
+  void updateLevelDetection() noexcept {
+    // 将峰值电平转换为dB
+    const auto peakDB = juce::Decibels::gainToDecibels(peakLevel);
+    
+    // 检查是否超过阈值
+    const bool isAboveThreshold = peakDB > thresholdDB;
+    
+    // 如果从低于阈值变为高于阈值，触发闪烁
+    if (isAboveThreshold && !wasAboveThreshold) {
+      isFlashing = true;
+      flashTimer = flashDuration;
     }
-
-    // 计算调制值
-    juce::FloatVectorOperations::multiply(lfoSamples.data(), modulationDepth,
-                                          samplesToProcess);
-    juce::FloatVectorOperations::add(lfoSamples.data(), 1.f, samplesToProcess);
-
-    // 对每个通道进行处理
-    for (const auto channelIndex :
-         std::views::iota(0, buffer.getNumChannels())) {
-      juce::FloatVectorOperations::multiply(
-          buffer.getWritePointer(channelIndex), lfoSamples.data(),
-          samplesToProcess);
-    }
-  }
-
-  void reset() noexcept {
-    for (auto& lfo : lfos) {
-      lfo.reset();
-    }
-    lfoSampleFifo.reset();
-  }
-
-  void readAllLfoSamples(juce::AudioBuffer<float>& bufferToFill) {
-    lfoSampleFifo.popAll(bufferToFill);
+    
+    // 更新状态
+    wasAboveThreshold = isAboveThreshold;
+    
+    // 重置峰值电平用于下一帧检测
+    peakLevel = 0.0f;
   }
 
 private:
-  static constexpr auto modulationDepth = 0.4f;
-  float dynamicModulationDepth = modulationDepth; // 动态调制深度，由XY控制器控制
-  float dynamicModulationRate = 5.0f; // 动态调制频率，由XY控制器控制
-  float xValue = 0.5f; // 当前X值
-  float yValue = 0.5f; // 当前Y值
-
-  static float triangle(float phase) {
-    // 将相位偏移pi/2，以便在相位为0时返回0
-    // 并与正弦波形匹配
-    // （否则波形将从1开始）
-    const auto offsetPhase = phase - juce::MathConstants<float>::halfPi;
-
-    // 源代码参考：
-    // https://thewolfsound.com/sine-saw-square-triangle-pulse-basic-waveforms-in-synthesis/#triangle
-    const auto ft = offsetPhase / juce::MathConstants<float>::twoPi;
-    return 4.f * std::abs(ft - std::floor(ft + 0.5f)) - 1.f;
-  }
-
-  void updateLfoWaveform() {
-    if (lfoToSet != currentLfo) {
-      // 更新平滑器
-      lfoTransitionSmoother.setCurrentAndTargetValue(getNextLfoValue());
-
-      currentLfo = lfoToSet;
-
-      // 启动平滑处理
-      lfoTransitionSmoother.setTargetValue(getNextLfoValue());
-    }
-  }
-
-  float getNextLfoValue() {
-    if (lfoTransitionSmoother.isSmoothing()) {
-      return lfoTransitionSmoother.getNextValue();
-    }
-    // the argument is added to the generated sample, thus, we pass in 0
-    // to get just the generated sample
-    return lfos[juce::toUnderlyingType(currentLfo)].processSample(0.f);
-  }
-
-  std::array<juce::dsp::Oscillator<float>, 2u> lfos{
-      juce::dsp::Oscillator<float>{[](auto phase) {
-        // start phase is -pi -> change it to 0 to match the mathematical sine
-        return std::sin(phase + juce::MathConstants<float>::pi);
-      }},
-      juce::dsp::Oscillator<float>{triangle}};
-
-  LfoWaveform currentLfo = LfoWaveform::sine;
-  LfoWaveform lfoToSet = currentLfo;
-
-  juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
-      lfoTransitionSmoother{0.f};
-  std::vector<float> lfoSamples;
-
-  SampleFifo<float> lfoSampleFifo;
+  // XY控制器参数
+  float xValue = 0.5f;        // 当前X值
+  float yValue = 0.4f;        // 当前Y值
+  float gainBoost = 1.0f;     // 当前增益值（基于XY位置计算）
+  float maxGain = 4.0f;       // 最大增益值（由控制条设置）
+  
+  // 信号检测相关参数
+  juce::IIRFilter lowPassFilter;     // 低通滤波器
+  juce::IIRFilter highPassFilter;    // 高通滤波器
+  float peakLevel = 0.0f;            // 峰值电平
+  bool isFlashing = false;           // 指示灯闪烁状态
+  float flashTimer = 0.0f;           // 闪烁计时器
+  const float thresholdDB = -12.0f;   // 触发阈值（-6dB）
+  const float flashDuration = 1.0f;  // 闪烁持续时间（0.5秒）
+  bool wasAboveThreshold = false;    // 上次是否超过阈值
 };
+
 }  // namespace tremolo

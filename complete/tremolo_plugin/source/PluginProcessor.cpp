@@ -136,21 +136,11 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
   // 检查是否处于完全旁路状态且没有过渡过程
   const auto bypassedAndNotTransitioning =
       parameters.bypassed.get() && !bypassTransitionSmoother.isTransitioning();
-  // 根据状态决定是否应用平滑处理
-  const auto applySmoothing =
-      bypassedAndNotTransitioning ? ApplySmoothing::no : ApplySmoothing::yes;
 
-  // 更新参数
-  // 如果完全旁路，跳过平滑处理以避免LFO波形变形
-  // 当参数在旁路开启状态下更改时
-  // 例如，如果LFO波形是正弦波，而用户在旁路开启状态下选择三角波
-  // 在切换旁路关闭时，他们将看到弯曲的三角波斜率，这是意外的
-  tremolo.setModulationRateHz(parameters.rate, applySmoothing);
-  tremolo.setLfoWaveform(
-      static_cast<Tremolo::LfoWaveform>(parameters.waveform.getIndex()),
-      applySmoothing);
+  // 更新最大增益值
+  tremolo.setMaxGain(parameters.gain.get());
   
-  // 更新XY控制器参数
+  // 更新XY控制器参数（根据XY位置计算实际增益）
   tremolo.setXYValues(parameters.xValue.get(), parameters.yValue.get());
 
   // 设置旁路状态到过渡平滑器
@@ -205,15 +195,8 @@ void PluginProcessor::setStateInformation(const void* data, int sizeInBytes) {
     DBG(result.getErrorMessage());
   }
 
-  // 跳过平滑处理以避免LFO波形变形
-  // 当加载项目或预设时
-  // 例如，默认的LFO波形是正弦波。如果项目或预设选择了三角波
-  // 用户在加载时将看到弯曲的三角波斜率，这是意外的
+  // 设置旁路状态
   bypassTransitionSmoother.setBypassForced(parameters.bypassed);
-  tremolo.setLfoWaveform(
-      static_cast<Tremolo::LfoWaveform>(parameters.waveform.getIndex()),
-      ApplySmoothing::no);
-  tremolo.setModulationRateHz(parameters.rate, ApplySmoothing::no);
 }
 
 // 获取参数引用：返回参数管理对象的引用
@@ -227,11 +210,7 @@ juce::AudioProcessorParameter* PluginProcessor::getBypassParameter()
   return &parameters.bypassed;
 }
 
-// 读取所有LFO样本到缓冲区：用于可视化LFO波形
-void PluginProcessor::readAllLfoSamples(
-    juce::AudioBuffer<float>& bufferToFill) {
-  tremolo.readAllLfoSamples(bufferToFill);
-}
+
 
 // 线程安全地获取采样率：在多线程环境中安全获取当前采样率
 double PluginProcessor::getSampleRateThreadSafe() const noexcept {

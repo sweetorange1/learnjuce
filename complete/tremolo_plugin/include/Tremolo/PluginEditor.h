@@ -1,4 +1,5 @@
 #pragma once
+#include <juce_audio_processors/juce_audio_processors.h>
 
 namespace tremolo {
 
@@ -32,12 +33,14 @@ private:
     void updatePosition(juce::Point<float> position);
 };
 
-class PluginEditor : public juce::AudioProcessorEditor {
+class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
 public:
   explicit PluginEditor(PluginProcessor&);
   ~PluginEditor() override;
 
   void resized() override;
+  void paint(juce::Graphics& g) override;
+  void timerCallback() override;
 
 private:
   juce::ImageComponent background;
@@ -47,8 +50,45 @@ private:
   juce::ToggleButton bypassButton{"BYPASSED"};
   juce::ButtonParameterAttachment bypassAttachment;
 
+  juce::Label gainLabel{"gain label", "GAIN"}; // 增益标签
+  juce::Slider gainSlider; // 增益控制条
+  juce::SliderParameterAttachment gainAttachment; // 增益参数附件
+
   XYController xyController; // XY控制器组件
   MessageOnClick about;
+  
+  juce::Label indicatorLabel{"indicator label", "PEAK"}; // 指示灯标签
+  
+  // 自定义指示灯组件
+  class IndicatorLight : public juce::Component {
+  public:
+    IndicatorLight() = default;
+    
+    void paint(juce::Graphics& g) override {
+      auto bounds = getLocalBounds().toFloat();
+      
+      // 根据状态设置指示灯颜色
+      juce::Colour indicatorColor = shouldFlash ? juce::Colours::red : juce::Colours::darkgrey;
+      
+      // 绘制指示灯背景（圆形）
+      g.setColour(indicatorColor);
+      g.fillEllipse(bounds);
+      
+      // 绘制指示灯边框
+      g.setColour(juce::Colours::white);
+      g.drawEllipse(bounds, 2.0f);
+    }
+    
+    void setFlashing(bool flashing) {
+      shouldFlash = flashing;
+      repaint();
+    }
+    
+  private:
+    bool shouldFlash = false;
+  };
+  
+  IndicatorLight indicatorLight; // 指示灯组件
 
   CustomLookAndFeel lookAndFeel;
 

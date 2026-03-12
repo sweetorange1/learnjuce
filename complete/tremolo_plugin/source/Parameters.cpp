@@ -58,6 +58,17 @@ juce::AudioParameterFloat& createYValueParameter(
           juce::NormalisableRange<float>{0.0f, 1.0f, 0.01f}, 0.5f,
           juce::AudioParameterFloatAttributes{}.withLabel("")));
 }
+
+juce::AudioParameterFloat& createGainParameter(
+    juce::AudioProcessor& processor) {
+  constexpr auto versionHint = 1;
+  return addParameterToProcessor(
+      processor,
+      std::make_unique<juce::AudioParameterFloat>(
+          juce::ParameterID{"gain", versionHint}, "Gain",
+          juce::NormalisableRange<float>{0.1f, 10.0f, 0.1f}, 1.0f,
+          juce::AudioParameterFloatAttributes{}.withLabel("x")));
+}
 }  // namespace
 
 Parameters::Parameters(juce::AudioProcessor& processor)
@@ -65,5 +76,6 @@ Parameters::Parameters(juce::AudioProcessor& processor)
       bypassed{createBypassedParameter(processor)},
       waveform{createWaveformParameter(processor)},
       xValue{createXValueParameter(processor)},
-      yValue{createYValueParameter(processor)} {}
+      yValue{createYValueParameter(processor)},
+      gain{createGainParameter(processor)} {}
 }  // namespace tremolo
