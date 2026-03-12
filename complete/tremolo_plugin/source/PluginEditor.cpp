@@ -133,6 +133,30 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   // 将背景组件添加到界面并使其可见
   addAndMakeVisible(background);
 
+  // 设置jj.png图片：从文件加载图片资源
+  juce::File jjImageFile("J:/C++/myfirst/complete/assets/jj.png");
+  if (jjImageFile.existsAsFile()) {
+      jjImage.setImage(juce::ImageFileFormat::loadFrom(jjImageFile));
+  }
+  // 在第一次指示灯亮起前，将jj图片设置为隐藏状态
+  jjImage.setVisible(false);
+  // 将jj图片组件添加到界面
+  addAndMakeVisible(jjImage);
+
+  // 初始化动画状态：设置动画系统的初始值
+  // isAnimating：动画是否正在进行中，false表示初始状态为静止
+  isAnimating = false;
+  // isMovingUp：当前运动方向，true表示向上运动，false表示向下运动
+  isMovingUp = true;
+  // animationProgress：动画进度，范围0.0到1.0，表示动画完成的比例
+  animationProgress = 0.0f;
+  // animationDuration：动画总持续时间（秒），根据指示灯亮起时间动态计算
+  animationDuration = 0.0f;
+  // startYPosition：动画起始Y轴位置（像素），从初始位置开始运动
+  startYPosition = 0.0f;
+  // targetYPosition：动画目标Y轴位置（像素），向上移动80像素
+  targetYPosition = 0.0f;
+
   // 设置Logo图片：从内存中加载Logo图片资源
   // logo.setImage(
   //     juce::ImageCache::getFromMemory(assets::Logo_png, assets::Logo_pngSize));
@@ -204,7 +228,7 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   addAndMakeVisible(xyController);
 
   // 启动定时器用于更新指示灯状态（每秒30帧）
-  startTimerHz(30);
+  startTimerHz(60);
 
   // 设置自定义外观：将lookAndFeel对象设置为当前组件的外观
   setLookAndFeel(&lookAndFeel);
@@ -222,16 +246,57 @@ PluginEditor::~PluginEditor() {
   setLookAndFeel(nullptr);
 }
 
-// timerCallback方法：定时器回调，用于更新指示灯状态
+// timerCallback方法：定时器回调函数，每秒调用30次（30fps）
+// 功能：更新指示灯状态、检测动画触发条件、管理动画生命周期
+// 调用机制：由JUCE框架自动调用，频率由startTimerHz(30)设置
 void PluginEditor::timerCallback() {
-    // 获取音频处理器引用（使用基类的processor成员）
+    // 获取音频处理器引用，用于访问Tremolo效果器的状态信息
+    // dynamic_cast：安全类型转换，确保processor确实是PluginProcessor类型
     auto& audioProcessor = dynamic_cast<PluginProcessor&>(processor);
     
-    // 更新指示灯状态（deltaTime = 1/30秒）
+    // 更新指示灯状态：传入时间增量（1/30秒）
+    // 指示灯根据音频信号的峰值决定是否闪烁
     audioProcessor.getTremolo().updateIndicatorState(1.0f / 30.0f);
     
-    // 更新指示灯组件的闪烁状态
-    indicatorLight.setFlashing(audioProcessor.getTremolo().shouldFlashIndicator());
+    // 获取指示灯当前是否应该闪烁的状态
+    bool shouldFlash = audioProcessor.getTremolo().shouldFlashIndicator();
+    
+    // 设置指示灯组件的闪烁状态
+    indicatorLight.setFlashing(shouldFlash);
+    
+  // 动画触发逻辑：当指示灯亮起且当前没有动画运行时，开始新动画
+  if (shouldFlash && !isAnimating) {
+      // 如果是第一次指示灯亮起，显示图片并重置状态
+      if (isFirstIndicatorFlash) {
+          jjImage.setVisible(true); // 显示图片
+          isFirstIndicatorFlash = false; // 标记为已显示过
+      }
+      
+      // 设置动画状态标志
+      isAnimating = true;
+      isMovingUp = true; // 初始运动方向：向上
+      animationProgress = 0.0f; // 重置动画进度
+      
+      // 计算动画持续时间：单程运动时间是指示灯亮起时间的一半
+      // 这样确保动画在指示灯熄灭前完成往返运动
+      float indicatorDuration = audioProcessor.getTremolo().getIndicatorDuration();
+      animationDuration = indicatorDuration / 2.0f;
+      
+      // 确保每次动画都从正确的初始位置开始
+      // 获取当前的基础边界，确保初始位置计算准确
+      auto bounds = getLocalBounds();
+      auto baseBounds = bounds.withSizeKeepingCentre(51, 325).translated(0, 200);
+      
+      // 设置运动参数：从初始位置（0）向上移动到80像素位置
+      startYPosition = 0.0f;
+      targetYPosition = 80.0f; // 向上移动80像素
+      
+      // 强制设置图片到初始位置，确保动画起点准确
+      jjImage.setBounds(baseBounds);
+  }
+    
+    // 更新动画状态：无论是否触发新动画，都需要更新当前动画
+    updateAnimation();
 }
 
 // paint方法：绘制编辑器背景
@@ -294,6 +359,104 @@ void PluginEditor::resized() {
   auto indicatorLightBounds = indicatorArea.removeFromRight(60);
   indicatorLightBounds = indicatorLightBounds.withSizeKeepingCentre(40, 40);
   indicatorLight.setBounds(indicatorLightBounds);
+
+  // 设置jj.png图片的位置和大小：居中靠下，大小为200x200像素
+  // withSizeKeepingCentre：保持中心点不变，设置指定大小
+  // translated(0, 150)：向下平移150像素，实现"靠下"效果
+  auto baseBounds = bounds.withSizeKeepingCentre(51, 325).translated(0, 200);
+  
+  // 图片位置管理逻辑：根据动画状态和第一次指示灯状态决定图片显示和位置
+  // 如果正在动画中，使用动画系统设置位置；否则根据第一次指示灯状态处理
+  if (isAnimating) {
+    // 动画进行中：调用updateAnimation()函数更新图片位置
+    // updateAnimation()会根据当前动画进度和缓动函数计算精确位置
+    updateAnimation(); // 更新动画位置
+  } else {
+    // 动画未进行：根据第一次指示灯状态处理图片
+    if (isFirstIndicatorFlash) {
+      // 第一次指示灯未亮起：保持图片隐藏状态
+      jjImage.setVisible(false);
+    } else {
+      // 第一次指示灯已亮起：显示图片并确保在初始位置（Y偏移为0）
+      jjImage.setVisible(true);
+      jjImage.setBounds(baseBounds);
+    }
+  }
+}
+
+// 缓动函数：向上运动（先快后慢）
+// 参数t：动画进度，范围0.0到1.0，表示动画完成的比例
+// 返回值：缓动后的进度值，用于计算平滑的运动效果
+// 数学原理：二次贝塞尔曲线，t<0.5时加速，t>=0.5时减速
+float PluginEditor::easeInOutQuad(float t) {
+    return t < 0.5f ? 2.0f * t * t : 1.0f - std::pow(-2.0f * t + 2.0f, 2.0f) / 2.0f;
+}
+
+// 缓动函数：向下运动（由慢变快）
+// 参数t：动画进度，范围0.0到1.0，表示动画完成的比例
+// 返回值：缓动后的进度值，用于计算平滑的运动效果
+// 数学原理：三次贝塞尔曲线，t<0.5时缓慢开始，t>=0.5时快速结束
+float PluginEditor::easeOutInQuad(float t) {
+    return t < 0.5f ? 0.5f * (1.0f - std::pow(1.0f - 2.0f * t, 3.0f)) : 
+                     0.5f * (1.0f + std::pow(2.0f * t - 1.0f, 3.0f));
+}
+
+// 动画更新函数：管理jj.png图片的上下运动动画
+// 功能：根据动画状态更新图片位置，实现平滑的上下运动效果
+// 调用时机：由定时器每秒调用30次，确保动画流畅
+void PluginEditor::updateAnimation() {
+    // 检查动画是否正在进行，如果未激活则直接返回
+    if (!isAnimating) return;
+    
+    // 计算动画进度：每次调用增加1/30秒的进度（假设30fps）
+    // animationDuration：动画总持续时间（秒）
+    // 60.0f：假设60fps的更新频率，确保动画速度准确
+    animationProgress += 1.0f / (animationDuration * 60.0f); // 30fps
+    
+    // 检查动画是否完成（进度达到或超过1.0）
+    if (animationProgress >= 1.0f) {
+        // 动画完成，根据当前运动方向决定下一步动作
+        if (isMovingUp) {
+            // 向上运动完成，切换到向下运动状态
+            isMovingUp = false;
+            animationProgress = 0.0f; // 重置进度
+            startYPosition = 100.0f; // 当前在最高点（向上移动80像素后的位置）
+            targetYPosition = 0.0f; // 目标位置：向下归位到初始位置
+        } else {
+            // 向下运动完成，停止整个动画过程
+            isAnimating = false;
+            animationProgress = 0.0f;
+            
+            // 重置运动参数，确保下次动画从正确的初始位置开始
+            startYPosition = 0.0f;
+            targetYPosition = 80.0f;
+            
+            // 强制设置图片回到初始位置，确保归位准确
+            auto bounds = getLocalBounds();
+            auto baseBounds = bounds.withSizeKeepingCentre(51, 325).translated(0, 200);
+            jjImage.setBounds(baseBounds);
+            return; // 直接返回，不再执行后续位置计算
+        }
+    }
+    
+    // 更新图片位置：根据当前动画状态计算Y轴偏移量
+    auto bounds = getLocalBounds();
+    auto baseBounds = bounds.withSizeKeepingCentre(51, 325).translated(0, 200);
+    
+    float currentYOffset = 0.0f;
+    if (isMovingUp) {
+        // 向上运动阶段：使用先快后慢的缓动函数
+        float easedProgress = easeInOutQuad(animationProgress);
+        currentYOffset = startYPosition + (targetYPosition - startYPosition) * easedProgress;
+    } else {
+        // 向下运动阶段：使用由慢变快的缓动函数
+        float easedProgress = easeOutInQuad(animationProgress);
+        currentYOffset = startYPosition + (targetYPosition - startYPosition) * easedProgress;
+    }
+    
+    // 应用计算出的Y轴偏移量，设置图片最终位置
+    auto jjImageBounds = baseBounds.translated(0, static_cast<int>(-currentYOffset));
+    jjImage.setBounds(jjImageBounds);
 }
 
 // 命名空间结束

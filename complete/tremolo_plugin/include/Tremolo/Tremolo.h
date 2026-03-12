@@ -64,13 +64,13 @@ public:
         const auto detectionSample = inputSample;
         
         // 应用低通滤波器
-        const auto lowPassed = lowPassFilter.processSingleSampleRaw(detectionSample);
+        // const auto lowPassed = lowPassFilter.processSingleSampleRaw(detectionSample);
         
         // 应用高通滤波器
-        const auto filteredSample = highPassFilter.processSingleSampleRaw(lowPassed);
+        // const auto filteredSample = highPassFilter.processSingleSampleRaw(lowPassed);
         
         // 计算峰值电平（绝对值）
-        const auto absSample = std::abs(filteredSample);
+        const auto absSample = std::abs(detectionSample);
         if (absSample > peakLevel) {
           peakLevel = absSample;
         }
@@ -103,6 +103,11 @@ public:
   // 获取当前电平检测状态（用于指示灯）
   bool shouldFlashIndicator() const noexcept {
     return isFlashing;
+  }
+
+  // 获取指示灯亮起持续时间
+  float getIndicatorDuration() const noexcept {
+    return flashDuration;
   }
 
   // 更新指示灯状态（需要在音频线程外调用）
@@ -152,7 +157,7 @@ private:
   bool isFlashing = false;           // 指示灯闪烁状态
   float flashTimer = 0.0f;           // 闪烁计时器
   const float thresholdDB = -12.0f;   // 触发阈值（-6dB）
-  const float flashDuration = 1.0f;  // 闪烁持续时间（0.5秒）
+  const float flashDuration = 0.2f;  // 闪烁持续时间（0.5秒）
   bool wasAboveThreshold = false;    // 上次是否超过阈值
 };
 

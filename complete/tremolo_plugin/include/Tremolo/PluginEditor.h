@@ -45,6 +45,23 @@ public:
 private:
   juce::ImageComponent background;
   juce::ImageComponent logo;
+  juce::ImageComponent jjImage;
+
+  // 图片动画相关变量
+  bool isAnimating = false;
+  bool isMovingUp = true;
+  float animationProgress = 0.0f;
+  float animationDuration = 0.0f;
+  float startYPosition = 0.0f;
+  float targetYPosition = 0.0f;
+  bool isFirstIndicatorFlash = true; // 是否是第一次指示灯亮起，用于控制图片初始隐藏状态
+  
+  // 缓动函数：实现先快后慢和由慢变快的效果
+  float easeInOutQuad(float t);
+  float easeOutInQuad(float t);
+  
+  // 动画更新函数
+  void updateAnimation();
 
   juce::Label bypassLabel{"bypass label", "BYPASS"};
   juce::ToggleButton bypassButton{"BYPASSED"};
