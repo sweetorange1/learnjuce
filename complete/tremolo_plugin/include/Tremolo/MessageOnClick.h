@@ -25,7 +25,7 @@ public:
 
 private:
   void displayPopup() {
-    // only the first call to addChildComponent() has an effect
+    // 只有第一次调用 addChildComponent() 会生效
     parent.addChildComponent(popup);
 
     if (!popup.isVisible()) {

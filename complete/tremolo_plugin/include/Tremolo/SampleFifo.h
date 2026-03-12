@@ -1,14 +1,12 @@
 #pragma once
 
 namespace tremolo {
-/** A single-producer, single-consumer FIFO queue to retrieve a single channel
- * of samples from the audio thread */
+/** 单生产者、单消费者FIFO队列，用于从音频线程检索单通道样本 */
 template <typename SampleType>
 class SampleFifo {
 public:
   void prepare(double sampleRate) {
-    // we want to provide enough capacity so that we don't miss a
-    // sample at low fps.
+    // 我们希望提供足够的容量，以便在低帧率下不会丢失样本
     const auto sampleCapacity = static_cast<int>(1.0 * sampleRate);
 
     buffer.setSize(1, sampleCapacity);
@@ -29,8 +27,7 @@ public:
   void popAll(juce::AudioBuffer<SampleType>& bufferToFill) {
     const auto sampleCount = fifo.getNumReady();
 
-    // avoidReallocating = true, to avoid reallocations when the buffer size
-    // does not increase
+    // avoidReallocating = true，以避免在缓冲区大小不增加时重新分配
     bufferToFill.setSize(1, sampleCount, false, false, true);
 
     const auto scope = fifo.read(sampleCount);

@@ -29,6 +29,20 @@ if(PROJECT_IS_TOP_LEVEL)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
   # Embeds debug information
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>" CACHE STRING "" FORCE)
+  
+  # Add UTF-8 encoding support for Chinese comments
+  if(MSVC)
+    # For MSVC compiler
+    add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
+    add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+  else()
+    # For GCC/Clang compilers
+    add_compile_options("$<$<OR:$<C_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:GNU>>:-finput-charset=UTF-8>")
+    add_compile_options("$<$<OR:$<C_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:GNU>>:-fexec-charset=UTF-8>")
+    add_compile_options("$<$<OR:$<C_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:Clang>>:-finput-charset=UTF-8>")
+    add_compile_options("$<$<OR:$<C_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:Clang>>:-fexec-charset=UTF-8>")
+  endif()
 endif()
 
 # I like to download the dependencies to the same folder as the project.
@@ -61,7 +75,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 endif()
 
 # Adds a plugin target.
-set(TREMOLO_PLUGIN_NAME "Tremolo")
+set(TREMOLO_PLUGIN_NAME "pupon")
 juce_add_plugin(
   TremoloCoursePlugin
   PRODUCT_NAME
@@ -69,7 +83,7 @@ juce_add_plugin(
   VERSION
     0.0.0 # 0 forces AU hosts to always refresh
   COMPANY_NAME
-    "WolfSound"
+    "!!saac.music"
   PLUGIN_MANUFACTURER_CODE
     Wfsd
   PLUGIN_CODE
@@ -123,6 +137,20 @@ target_compile_definitions(tremolo_plugin
 # Enables strict C++ warnings.
 target_compile_options(tremolo_plugin INTERFACE "${PROJECT_WARNINGS_CXX}")
 
+# Add UTF-8 encoding support for Chinese comments
+if(MSVC)
+  target_compile_options(tremolo_plugin INTERFACE "/utf-8")
+else()
+  target_compile_options(tremolo_plugin INTERFACE "-finput-charset=UTF-8" "-fexec-charset=UTF-8")
+endif()
+
+# Add UTF-8 encoding support for Chinese comments
+if(MSVC)
+  target_compile_options(tremolo_plugin INTERFACE "/utf-8")
+else()
+  target_compile_options(tremolo_plugin INTERFACE "-finput-charset=UTF-8" "-fexec-charset=UTF-8")
+endif()
+
 target_link_libraries(tremolo_plugin INTERFACE tremolo::tremolo_plugin_assets)
 
 target_link_libraries(
@@ -162,4 +190,18 @@ if(BUILD_TESTS)
 
   # Adds all the targets configured in the "test" folder.
   add_subdirectory(test)
+
+  # Add UTF-8 encoding support for Chinese comments
+  if(MSVC)
+    # For MSVC compiler
+    add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
+    add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+  else()
+    # For GCC/Clang compilers
+    add_compile_options("$<$<OR:$<C_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:GNU>>:-finput-charset=UTF-8>")
+    add_compile_options("$<$<OR:$<C_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:GNU>>:-fexec-charset=UTF-8>")
+    add_compile_options("$<$<OR:$<C_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:Clang>>:-finput-charset=UTF-8>")
+    add_compile_options("$<$<OR:$<C_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:Clang>>:-fexec-charset=UTF-8>")
+  endif()
 endif()

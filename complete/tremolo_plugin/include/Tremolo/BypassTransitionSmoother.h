@@ -2,14 +2,13 @@
 
 namespace tremolo {
 /**
- * Class facilitating transition to and from bypassed state over a single block.
+ * 用于在单个块内实现旁路状态转换的类。
  *
- * It allows 2 things:
- *  - detecting that a bypass state transition takes place
- *  - fade-in and fade-out of dry (unprocessed) and wet (processed) buffers
- *    according to the transition type
+ * 它提供两个功能：
+ *  - 检测旁路状态转换的发生
+ *  - 根据转换类型对干（未处理）和湿（已处理）缓冲区进行淡入淡出
  *
- * Use the following code in the processBlock() method of your plugin processor:
+ * 在插件处理器的processBlock()方法中使用以下代码：
  *
  * @code
  * //...
@@ -26,11 +25,10 @@ namespace tremolo {
  *   return;
  * }
  *
- * // avoid processing if bypassed, process otherwise...
+ * // 如果旁路则避免处理，否则进行处理...
  * @endcode
  *
- * Alternatively, you can unconditionally call setDryBuffer() and
- * mixToWetBuffer(), like this:
+ * 或者，你可以无条件调用setDryBuffer()和mixToWetBuffer()，如下所示：
  *
  * @code
  * //...
@@ -38,7 +36,7 @@ namespace tremolo {
  * bypassTransitionSmoother.setBypass(parameters.bypassed);
  *
  * if (parameters.bypassed && !bypassTransitionSmoother.isTransitioning()) {
- *   // avoid processing if the plugin is bypassed
+ *   // 如果插件处于旁路状态且没有转换，则避免处理
  *   return;
  * }
  *
@@ -46,12 +44,12 @@ namespace tremolo {
  * yourAudioEffectClassInstance.process(buffer);
  * bypassTransitionSmoother.mixToWetBuffer(buffer);
  *
- * // no more processing necessary
+ * // 无需更多处理
  * @endcode
  *
- * Remember to call prepare() in prepareToPlay(),
- * setBypassForced() in setStateInformation(), and reset() in
- * releaseResources().
+ * 记得在prepareToPlay()中调用prepare()，
+ * 在setStateInformation()中调用setBypassForced()，
+ * 在releaseResources()中调用reset()。
  */
 class BypassTransitionSmoother {
 public:
@@ -101,7 +99,7 @@ public:
 
   void setDryBuffer(const juce::AudioBuffer<float>& buffer) noexcept {
     if (shouldAvoidProcessing()) {
-      // plugin is operational: no need to store the dry buffer
+      // 插件正在运行：无需存储干缓冲区
       return;
     }
 
@@ -117,7 +115,7 @@ public:
 
   void mixToWetBuffer(juce::AudioBuffer<float>& buffer) noexcept {
     if (shouldAvoidProcessing()) {
-      // plugin is operational: no need to modify the wet buffer
+      // 插件正在运行：无需修改湿缓冲区
       return;
     }
 

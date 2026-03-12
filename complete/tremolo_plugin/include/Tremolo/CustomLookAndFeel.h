@@ -37,7 +37,7 @@ public:
 
   juce::Font getComboBoxFont(juce::ComboBox&) override;
 
-  /** @brief Positions the Label within the ComboBox and sets its font */
+  /** @brief 在ComboBox内定位Label并设置其字体 */
   void positionComboBoxText(juce::ComboBox&,
                             juce::Label& labelToPosition) override;
 

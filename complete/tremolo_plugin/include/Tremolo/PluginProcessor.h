@@ -36,6 +36,10 @@ public:
   [[nodiscard]] Parameters& getParameterRefs() noexcept;
   juce::AudioProcessorParameter* getBypassParameter() const noexcept override;
 
+  /**
+   *
+   * @param bufferToFill
+   */
   void readAllLfoSamples(juce::AudioBuffer<float>& bufferToFill);
 
   /** @brief Retrieves the most recent sample rate the processor was given

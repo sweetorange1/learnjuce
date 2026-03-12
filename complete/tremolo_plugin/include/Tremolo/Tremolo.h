@@ -78,29 +78,28 @@ public:
   }
 
   void processChannelwise(juce::AudioBuffer<float>& buffer) noexcept {
-    // actual updating of the LFO waveform happens in process()
-    // to keep setLfoWaveform() idempotent
+    // LFO波形的实际更新在process()中进行
+    // 以保持setLfoWaveform()的幂等性
     updateLfoWaveform();
 
     const auto samplesToProcess = std::min(
         lfoSamples.size(), static_cast<size_t>(buffer.getNumSamples()));
 
-    // detect if the host is misbehaving; if this fails, then many more frames
-    // have been given for processing than declared in prepare()
+    // 检测主机是否行为异常；如果此断言失败，则表示处理帧数超过了prepare()中声明的数量
     jassert(samplesToProcess <= lfoSamples.size());
 
-    // generate LFO signal
+    // 生成LFO信号
     for (const auto i : std::views::iota(0u, samplesToProcess)) {
       lfoSamples[i] = getNextLfoValue();
       lfoSampleFifo.push(lfoSamples[i]);
     }
 
-    // calculate the modulation value
+    // 计算调制值
     juce::FloatVectorOperations::multiply(lfoSamples.data(), modulationDepth,
                                           samplesToProcess);
     juce::FloatVectorOperations::add(lfoSamples.data(), 1.f, samplesToProcess);
 
-    // for each channel
+    // 对每个通道进行处理
     for (const auto channelIndex :
          std::views::iota(0, buffer.getNumChannels())) {
       juce::FloatVectorOperations::multiply(
@@ -124,12 +123,12 @@ private:
   static constexpr auto modulationDepth = 0.4f;
 
   static float triangle(float phase) {
-    // offset the phase by pi/2 to return 0 if phase equals 0
-    // and match the sine waveform
-    // (otherwise, the waveform starts at 1)
+    // 将相位偏移pi/2，以便在相位为0时返回0
+    // 并与正弦波形匹配
+    // （否则波形将从1开始）
     const auto offsetPhase = phase - juce::MathConstants<float>::halfPi;
 
-    // Source:
+    // 源代码参考：
     // https://thewolfsound.com/sine-saw-square-triangle-pulse-basic-waveforms-in-synthesis/#triangle
     const auto ft = offsetPhase / juce::MathConstants<float>::twoPi;
     return 4.f * std::abs(ft - std::floor(ft + 0.5f)) - 1.f;
@@ -137,12 +136,12 @@ private:
 
   void updateLfoWaveform() {
     if (lfoToSet != currentLfo) {
-      // update the smoother
+      // 更新平滑器
       lfoTransitionSmoother.setCurrentAndTargetValue(getNextLfoValue());
 
       currentLfo = lfoToSet;
 
-      // initiate smoothing
+      // 启动平滑处理
       lfoTransitionSmoother.setTargetValue(getNextLfoValue());
     }
   }

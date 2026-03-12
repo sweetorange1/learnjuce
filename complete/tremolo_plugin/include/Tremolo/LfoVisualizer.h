@@ -32,14 +32,14 @@ private:
 
   void samplesToPath();
 
-  /** @brief Creates a transform that maps current LFO curve to component bounds
+  /** @brief 创建一个变换，将当前LFO曲线映射到组件边界
    *
-   * @detail The transform is based on following point mappings:
+   * @detail 变换基于以下点映射：
    *
-   *   (0,ylim)                        -> (0,0) (left-top corner)
-   *   (0,-ylim)                       -> (0, height) (left-bottom corner)
-   *   (curve end X coordinate, -ylim) -> (component width, component height)
-   *                                      (right-bottom corner)
+   *   (0,ylim)                        -> (0,0) (左上角)
+   *   (0,-ylim)                       -> (0, height) (左下角)
+   *   (曲线结束X坐标, -ylim) -> (组件宽度, 组件高度)
+   *                                      (右下角)
    */
   [[nodiscard]] juce::AffineTransform getLfoCurveTransform() const;
 
