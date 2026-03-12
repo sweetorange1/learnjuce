@@ -149,6 +149,9 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
   tremolo.setLfoWaveform(
       static_cast<Tremolo::LfoWaveform>(parameters.waveform.getIndex()),
       applySmoothing);
+  
+  // 更新XY控制器参数
+  tremolo.setXYValues(parameters.xValue.get(), parameters.yValue.get());
 
   // 设置旁路状态到过渡平滑器
   bypassTransitionSmoother.setBypass(parameters.bypassed);

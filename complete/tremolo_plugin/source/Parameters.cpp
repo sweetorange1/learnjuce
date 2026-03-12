@@ -36,10 +36,34 @@ juce::AudioParameterChoice& createWaveformParameter(
           juce::ParameterID{"modulation.waveform", versionHint},
           "Modulation waveform", juce::StringArray{"Sine", "Triangle"}, 0));
 }
+
+juce::AudioParameterFloat& createXValueParameter(
+    juce::AudioProcessor& processor) {
+  constexpr auto versionHint = 1;
+  return addParameterToProcessor(
+      processor,
+      std::make_unique<juce::AudioParameterFloat>(
+          juce::ParameterID{"xy.x", versionHint}, "X Value",
+          juce::NormalisableRange<float>{0.0f, 1.0f, 0.01f}, 0.5f,
+          juce::AudioParameterFloatAttributes{}.withLabel("")));
+}
+
+juce::AudioParameterFloat& createYValueParameter(
+    juce::AudioProcessor& processor) {
+  constexpr auto versionHint = 1;
+  return addParameterToProcessor(
+      processor,
+      std::make_unique<juce::AudioParameterFloat>(
+          juce::ParameterID{"xy.y", versionHint}, "Y Value",
+          juce::NormalisableRange<float>{0.0f, 1.0f, 0.01f}, 0.5f,
+          juce::AudioParameterFloatAttributes{}.withLabel("")));
+}
 }  // namespace
 
 Parameters::Parameters(juce::AudioProcessor& processor)
     : rate{createModulationRateParameter(processor)},
       bypassed{createBypassedParameter(processor)},
-      waveform{createWaveformParameter(processor)} {}
+      waveform{createWaveformParameter(processor)},
+      xValue{createXValueParameter(processor)},
+      yValue{createYValueParameter(processor)} {}
 }  // namespace tremolo

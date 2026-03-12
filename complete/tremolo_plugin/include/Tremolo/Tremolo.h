@@ -49,6 +49,15 @@ public:
     }
   }
 
+  void setXYValues(float x, float y) noexcept {
+    xValue = x;
+    yValue = y;
+    // 根据X和Y值调整调制参数
+    // X值可以控制调制深度，Y值可以控制调制频率
+    dynamicModulationDepth = juce::jmap(x, 0.0f, 1.0f, 0.1f, 0.8f);
+    dynamicModulationRate = juce::jmap(y, 0.0f, 1.0f, 0.5f, 20.0f);
+  }
+
   void process(juce::AudioBuffer<float>& buffer) noexcept {
     // actual updating of the LFO waveform happens in process()
     // to keep setLfoWaveform() idempotent
@@ -60,8 +69,13 @@ public:
       const auto lfoValue = getNextLfoValue();
       lfoSampleFifo.push(lfoValue);
 
-      // calculate the modulation value
-      const auto modulationValue = modulationDepth * lfoValue + 1.f;
+      // calculate the modulation value using dynamic parameters from XY controller
+      const auto modulationValue = dynamicModulationDepth * lfoValue + 1.f;
+
+      // calculate volume attenuation based on XY distance from center (0.5, 0.5)
+      const auto centerDistance = std::sqrt(std::pow(xValue - 0.5f, 2.0f) + std::pow(yValue - 0.5f, 2.0f));
+      // map distance (0 to sqrt(0.5)) to volume (1.0 to 0.0)
+      const auto volumeAttenuation = juce::jmap(centerDistance, 0.0f, std::sqrt(0.5f), 1.0f, 0.0f);
 
       for (const auto channelIndex :
            std::views::iota(0, buffer.getNumChannels())) {
@@ -69,7 +83,10 @@ public:
         const auto inputSample = buffer.getSample(channelIndex, frameIndex);
 
         // modulate the sample
-        const auto outputSample = modulationValue * inputSample;
+        const auto modulatedSample = modulationValue * inputSample;
+        
+        // apply volume attenuation based on XY distance
+        const auto outputSample = modulatedSample * volumeAttenuation;
 
         // set the output sample
         buffer.setSample(channelIndex, frameIndex, outputSample);
@@ -121,6 +138,10 @@ public:
 
 private:
   static constexpr auto modulationDepth = 0.4f;
+  float dynamicModulationDepth = modulationDepth; // 动态调制深度，由XY控制器控制
+  float dynamicModulationRate = 5.0f; // 动态调制频率，由XY控制器控制
+  float xValue = 0.5f; // 当前X值
+  float yValue = 0.5f; // 当前Y值
 
   static float triangle(float phase) {
     // 将相位偏移pi/2，以便在相位为0时返回0
