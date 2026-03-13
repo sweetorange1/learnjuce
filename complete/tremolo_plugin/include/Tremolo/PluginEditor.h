@@ -33,6 +33,20 @@ private:
     void updatePosition(juce::Point<float> position);
 };
 
+// 设置面板组件
+class SettingsPanel : public juce::Component {
+public:
+    SettingsPanel();
+    
+    void paint(juce::Graphics& g) override;
+    void resized() override;
+    
+    void setVisible(bool shouldBeVisible) override;
+    
+private:
+    juce::Label titleLabel;
+};
+
 class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
 public:
   explicit PluginEditor(PluginProcessor&);
@@ -46,6 +60,7 @@ private:
   juce::ImageComponent background;
   juce::ImageComponent logo;
   juce::ImageComponent jjImage;
+  juce::ImageButton settingsButton; // 设置按钮
 
   // 图片动画相关变量
   bool isAnimating = false;
@@ -55,6 +70,10 @@ private:
   float startYPosition = 0.0f;
   float targetYPosition = 0.0f;
   bool isFirstIndicatorFlash = true; // 是否是第一次指示灯亮起，用于控制图片初始隐藏状态
+  
+  // 设置面板相关变量
+  SettingsPanel settingsPanel;
+  bool isSettingsPanelVisible = false;
   
   // 缓动函数：实现先快后慢和由慢变快的效果
   float easeInOutQuad(float t);

@@ -1,6 +1,41 @@
 // tremolo命名空间：C++中使用命名空间来组织代码，避免命名冲突
 namespace tremolo {
 
+// SettingsPanel类的实现
+SettingsPanel::SettingsPanel() {
+    // 设置标题标签
+    titleLabel.setText("Settings", juce::dontSendNotification);
+    titleLabel.setJustificationType(juce::Justification::centred);
+    titleLabel.setFont(juce::Font(18.0f, juce::Font::bold));
+    titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible(titleLabel);
+}
+
+void SettingsPanel::paint(juce::Graphics& g) {
+    // 绘制设置面板背景（半透明黑色）
+    g.setColour(juce::Colour(0xCC000000));
+    g.fillRoundedRectangle(getLocalBounds().toFloat(), 10.0f);
+    
+    // 绘制边框
+    g.setColour(juce::Colours::white);
+    g.drawRoundedRectangle(getLocalBounds().toFloat(), 10.0f, 2.0f);
+}
+
+void SettingsPanel::resized() {
+    // 设置标题标签的位置（顶部居中）
+    auto titleBounds = getLocalBounds().removeFromTop(40);
+    titleLabel.setBounds(titleBounds);
+}
+
+void SettingsPanel::setVisible(bool shouldBeVisible) {
+    Component::setVisible(shouldBeVisible);
+    
+    // 如果设置为可见，将其置于最顶层
+    if (shouldBeVisible) {
+        toFront(false);
+    }
+}
+
 // XYController类的实现
 XYController::XYController() {
     // 设置XY控制器可以接收鼠标事件
@@ -142,6 +177,39 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   jjImage.setVisible(false);
   // 将jj图片组件添加到界面
   addAndMakeVisible(jjImage);
+
+  // 设置设置按钮：从文件加载设置图标
+  juce::File settingsImageFile("J:/C++/myfirst/complete/assets/setting.png");
+  if (settingsImageFile.existsAsFile()) {
+      settingsButton.setImages(false, true, true,
+          juce::ImageFileFormat::loadFrom(settingsImageFile), // 正常状态图片
+          1.0f, // 正常状态图片不透明度
+          juce::Colours::transparentBlack, // 正常状态覆盖颜色
+          juce::ImageFileFormat::loadFrom(settingsImageFile), // 悬停状态图片
+          1.0f, // 悬停状态图片不透明度
+          juce::Colours::white.withAlpha(0.3f), // 悬停状态覆盖颜色
+          juce::ImageFileFormat::loadFrom(settingsImageFile), // 按下状态图片
+          1.0f, // 按下状态图片不透明度
+          juce::Colours::white.withAlpha(0.5f) // 按下状态覆盖颜色
+      );
+  }
+  // 设置按钮点击事件
+  settingsButton.onClick = [this]() {
+      // 切换设置面板的可见状态
+      isSettingsPanelVisible = !isSettingsPanelVisible;
+      settingsPanel.setVisible(isSettingsPanelVisible);
+      
+      // 如果设置面板可见，将其置于最顶层
+      if (isSettingsPanelVisible) {
+          settingsPanel.toFront(false);
+      }
+  };
+  // 将设置按钮添加到界面
+  addAndMakeVisible(settingsButton);
+
+  // 初始化设置面板
+  settingsPanel.setVisible(false); // 初始状态为隐藏
+  addChildComponent(settingsPanel); // 作为子组件添加，但不立即显示
 
   // 初始化动画状态：设置动画系统的初始值
   // isAnimating：动画是否正在进行中，false表示初始状态为静止
@@ -312,6 +380,14 @@ void PluginEditor::resized() {
 
   // 设置背景图片覆盖整个边界
   background.setBounds(bounds);
+
+  // 设置设置按钮的位置：左上角，大小为40x40像素，距离左上角10像素边距
+  auto settingsButtonBounds = juce::Rectangle<int>(10, 10, 40, 40);
+  settingsButton.setBounds(settingsButtonBounds);
+  
+  // 设置设置面板的位置：覆盖整个界面，但留出边距
+  auto settingsPanelBounds = bounds.reduced(50);
+  settingsPanel.setBounds(settingsPanelBounds);
 
   // // 设置Logo的位置和大小：左上角(16,16)，宽105，高24
   // logo.setBounds({16, 16, 105, 24});
