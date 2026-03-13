@@ -167,15 +167,15 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   const auto sideFontColor = juce::Colour{0xFF6EA0C7};
 
   // 设置旁路标签的对齐方式为左对齐
-  bypassLabel.setJustificationType(juce::Justification::left);
+  // bypassLabel.setJustificationType(juce::Justification::left);
   // 设置最小水平缩放比例
-  bypassLabel.setMinimumHorizontalScale(1.f);
+  // bypassLabel.setMinimumHorizontalScale(1.f);
   // 设置旁路标签的字体
-  bypassLabel.setFont(lookAndFeel.getSideLabelsFont());
+  // bypassLabel.setFont(lookAndFeel.getSideLabelsFont());
   // 设置旁路标签的文本颜色
-  bypassLabel.setColour(juce::Label::textColourId, sideFontColor);
+  // bypassLabel.setColour(juce::Label::textColourId, sideFontColor);
   // 将旁路标签添加到界面
-  addAndMakeVisible(bypassLabel);
+  // addAndMakeVisible(bypassLabel);
 
   // 设置旁路按钮的点击事件处理函数（使用lambda表达式）
   bypassButton.onClick = [this]() {
@@ -186,7 +186,7 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   // 立即执行一次点击事件，确保初始状态正确
   bypassButton.onClick();
   // 将旁路按钮添加到界面
-  addAndMakeVisible(bypassButton);
+  // addAndMakeVisible(bypassButton);
 
   // 设置增益标签
   gainLabel.setJustificationType(juce::Justification::centred);
@@ -332,20 +332,20 @@ void PluginEditor::resized() {
   xyController.setBounds(xyBounds);
 
   // 计算旁路按钮的边界：右上角区域
-  auto bypassButtonBounds = bounds;
-  bypassButtonBounds.removeFromTop(0);
-  bypassButtonBounds.removeFromRight(0);
-  bypassButtonBounds.removeFromBottom(660);
-  bypassButtonBounds.removeFromLeft(560);
-  bypassButton.setBounds(bypassButtonBounds);
+  // auto bypassButtonBounds = bounds;
+  // bypassButtonBounds.removeFromTop(0);
+  // bypassButtonBounds.removeFromRight(0);
+  // bypassButtonBounds.removeFromBottom(660);
+  // bypassButtonBounds.removeFromLeft(560);
+  // bypassButton.setBounds(bypassButtonBounds);
 
   // 计算旁路标签的边界：旁路按钮上方
-  auto bypassLabelBounds = bounds;
-  bypassLabelBounds.removeFromTop(48);
-  bypassLabelBounds.removeFromRight(104);
-  bypassLabelBounds.removeFromBottom(206);
-  bypassLabelBounds.removeFromLeft(396);
-  bypassLabel.setBounds(bypassLabelBounds);
+  // auto bypassLabelBounds = bounds;
+  // bypassLabelBounds.removeFromTop(48);
+  // bypassLabelBounds.removeFromRight(104);
+  // bypassLabelBounds.removeFromBottom(206);
+  // bypassLabelBounds.removeFromLeft(396);
+  // bypassLabel.setBounds(bypassLabelBounds);
 
   // 计算指示灯区域的边界：顶部区域，在增益控制条下方
   auto indicatorArea = bounds.removeFromTop(120);
