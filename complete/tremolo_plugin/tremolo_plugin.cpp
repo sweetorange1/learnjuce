@@ -6,3 +6,4 @@
 #include "source/Parameters.cpp"
 #include "source/PluginEditor.cpp"
 #include "source/PluginProcessor.cpp"
+#include "source/SpectrumAnalyser.cpp"

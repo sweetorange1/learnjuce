@@ -28,7 +28,7 @@ if(PROJECT_IS_TOP_LEVEL)
   # Links to C++ runtime statically
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
   # Embeds debug information
-  set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>" CACHE STRING "" FORCE)
+  set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>" CACHE STRING "" FORCE)
   
   # Add UTF-8 encoding support for Chinese comments
   if(MSVC)
@@ -128,11 +128,17 @@ add_library(tremolo::tremolo_plugin_assets ALIAS tremolo_plugin_assets)
 
 juce_add_module(tremolo_plugin ALIAS_NAMESPACE tremolo)
 
-# Additional definitions required by all users of this module.
-target_compile_definitions(tremolo_plugin
-  INTERFACE
-    TREMOLO_PLUGIN_NAME="${TREMOLO_PLUGIN_NAME}"
-)
+  # Additional definitions required by all users of this module.
+  target_compile_definitions(tremolo_plugin
+    INTERFACE
+      TREMOLO_PLUGIN_NAME="${TREMOLO_PLUGIN_NAME}"
+  )
+
+  # Disable JUCE assertions in debug mode to avoid breakpoint exceptions
+  target_compile_definitions(TremoloCoursePlugin PRIVATE
+    $<$<CONFIG:Debug>:JUCE_DISABLE_ASSERTIONS=1>
+    $<$<CONFIG:Debug>:JUCE_DISABLE_CAUTIOUS_PARAMETER_ID_CHECKING=1>
+  )
 
 # Enables strict C++ warnings.
 target_compile_options(tremolo_plugin INTERFACE "${PROJECT_WARNINGS_CXX}")
