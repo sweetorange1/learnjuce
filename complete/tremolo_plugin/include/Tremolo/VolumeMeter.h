@@ -14,7 +14,10 @@ public:
     
     // 组件大小调整
     void resized() override;
-    
+
+    void mouseDown(const juce::MouseEvent& event) override;
+    void mouseDrag(const juce::MouseEvent& event) override;
+
     // 定时器回调（用于实时更新显示）
     void timerCallback() override;
     
@@ -26,6 +29,10 @@ public:
     
     // 设置峰值保持时间
     void setPeakHoldTime(float seconds);
+
+    void setThresholdDb(float thresholdDb);
+    float getThresholdDb() const;
+    void setThresholdChangedCallback(std::function<void(float)> callback);
 
 private:
     // 音量电平相关变量
@@ -43,13 +50,25 @@ private:
     static constexpr int HISTORY_SIZE = 200;     // 历史数据大小
     std::array<float, HISTORY_SIZE> levelHistory; // 历史电平数据
     int historyIndex{0};                         // 历史数据索引
-    
+
+    // 触发阈值（dB）
+    std::atomic<float> thresholdDb{-12.0f};
+    std::function<void(float)> thresholdChangedCallback;
+
     // 颜色配置
     juce::Colour meterBackground{juce::Colour(0xFF222222)};     // 背景色
     juce::Colour meterForeground{juce::Colour(0xFF00FF00)};      // 前景色（绿色）
     juce::Colour peakIndicator{juce::Colour(0xFFFF0000)};       // 峰值指示器（红色）
     juce::Colour waveformColor{juce::Colour(0xFF6EA0C7)};       // 波形颜色
-    
+    juce::Colour thresholdColor{juce::Colours::orange};         // 阈值线颜色
+
+    static constexpr float minThresholdDb = -60.0f;
+    static constexpr float maxThresholdDb = 0.0f;
+
+    float thresholdDbToY(float db, juce::Rectangle<float> bounds) const;
+    float yToThresholdDb(float y, juce::Rectangle<float> bounds) const;
+    void updateThresholdFromY(float y);
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VolumeMeter)
 };
 

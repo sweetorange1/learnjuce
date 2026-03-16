@@ -52,12 +52,16 @@ public:
   /** Returns latest input peak (linear gain 0..1+) sampled on audio thread. */
   float getLatestInputLevel() const noexcept;
 
+  void setTriggerThresholdDb(float thresholdDb) noexcept;
+  float getTriggerThresholdDb() const noexcept;
+
 private:
   Parameters parameters{*this};
   Tremolo tremolo;
   BypassTransitionSmoother bypassTransitionSmoother;
   std::atomic<double> currentSampleRate{0.};
   std::atomic<float> latestInputLevel{0.0f};
+  std::atomic<float> triggerThresholdDb{-12.0f};
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginProcessor)
 };

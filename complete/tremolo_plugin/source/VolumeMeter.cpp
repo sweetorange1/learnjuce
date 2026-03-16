@@ -84,7 +84,24 @@ void VolumeMeter::paint(juce::Graphics& g) {
             g.drawLine(peakX, 0.0f, peakX, bounds.getHeight(), 2.0f);
         }
     }
-    
+
+    const auto threshold = thresholdDb.load(std::memory_order_relaxed);
+    const auto thresholdY = thresholdDbToY(threshold, bounds);
+    g.setColour(thresholdColor);
+    g.drawLine(bounds.getX(), thresholdY, bounds.getRight(), thresholdY, 1.5f);
+
+    const auto thresholdText = juce::String(threshold, 1) + " dB";
+    auto labelBounds = juce::Rectangle<float>(bounds.getRight() - 88.0f,
+                                              thresholdY - 10.0f,
+                                              84.0f,
+                                              18.0f);
+    labelBounds = labelBounds.constrainedWithin(bounds.reduced(2.0f));
+    g.setColour(juce::Colours::black.withAlpha(0.5f));
+    g.fillRoundedRectangle(labelBounds, 3.0f);
+    g.setColour(thresholdColor.brighter(0.3f));
+    g.setFont(juce::Font(11.0f, juce::Font::bold));
+    g.drawText(thresholdText, labelBounds, juce::Justification::centredRight, false);
+
     // 绘制刻度线和标签
     g.setColour(juce::Colours::white.withAlpha(0.5f));
     g.setFont(juce::Font(10.0f));
@@ -108,6 +125,14 @@ void VolumeMeter::resized() {
     // 组件大小调整时无需特殊处理
 }
 
+void VolumeMeter::mouseDown(const juce::MouseEvent& event) {
+    updateThresholdFromY(event.position.y);
+}
+
+void VolumeMeter::mouseDrag(const juce::MouseEvent& event) {
+    updateThresholdFromY(event.position.y);
+}
+
 void VolumeMeter::timerCallback() {
     // 更新峰值保持计时器
     float deltaTime = 1.0f / 30.0f; // 30fps
@@ -125,8 +150,12 @@ void VolumeMeter::timerCallback() {
 }
 
 void VolumeMeter::updateLevel(float newLevel) {
-    // 更新当前电平（限制在0-1范围内）
-    float clampedLevel = juce::jlimit(0.0f, 1.0f, newLevel);
+    // 将线性增益转换到dB刻度后再归一化到0..1，保证与阈值线语义一致。
+    const auto minGain = juce::Decibels::decibelsToGain(minThresholdDb);
+    const auto safeGain = juce::jmax(newLevel, minGain);
+    const auto levelDb = juce::Decibels::gainToDecibels(safeGain, minThresholdDb);
+    const auto normalizedLevel = juce::jmap(levelDb, minThresholdDb, maxThresholdDb, 0.0f, 1.0f);
+    const auto clampedLevel = juce::jlimit(0.0f, 1.0f, normalizedLevel);
     currentLevel.store(clampedLevel);
     
     // 更新历史数据（用于波形显示）
@@ -147,6 +176,45 @@ void VolumeMeter::setDisplayMode(bool useWaveform) {
 
 void VolumeMeter::setPeakHoldTime(float seconds) {
     peakHoldDuration.store(juce::jlimit(0.1f, 10.0f, seconds));
+}
+
+void VolumeMeter::setThresholdDb(float newThresholdDb) {
+    thresholdDb.store(juce::jlimit(minThresholdDb, maxThresholdDb, newThresholdDb),
+                      std::memory_order_relaxed);
+    repaint();
+}
+
+float VolumeMeter::getThresholdDb() const {
+    return thresholdDb.load(std::memory_order_relaxed);
+}
+
+void VolumeMeter::setThresholdChangedCallback(std::function<void(float)> callback) {
+    thresholdChangedCallback = callback;
+}
+
+float VolumeMeter::thresholdDbToY(float db, juce::Rectangle<float> bounds) const {
+    return juce::jmap(juce::jlimit(minThresholdDb, maxThresholdDb, db),
+                      maxThresholdDb,
+                      minThresholdDb,
+                      bounds.getY(),
+                      bounds.getBottom());
+}
+
+float VolumeMeter::yToThresholdDb(float y, juce::Rectangle<float> bounds) const {
+    return juce::jmap(juce::jlimit(bounds.getY(), bounds.getBottom(), y),
+                      bounds.getY(),
+                      bounds.getBottom(),
+                      maxThresholdDb,
+                      minThresholdDb);
+}
+
+void VolumeMeter::updateThresholdFromY(float y) {
+    const auto db = yToThresholdDb(y, getLocalBounds().toFloat());
+    setThresholdDb(db);
+
+    if (thresholdChangedCallback) {
+        thresholdChangedCallback(db);
+    }
 }
 
 }  // namespace tremolo

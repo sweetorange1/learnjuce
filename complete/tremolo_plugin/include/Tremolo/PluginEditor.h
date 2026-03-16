@@ -49,7 +49,10 @@ public:
     
     // 设置显示模式
     void setVolumeMeterMode(bool useWaveform);
-    
+
+    void setThresholdDb(float thresholdDb);
+    void setThresholdChangedCallback(std::function<void(float)> callback);
+
 private:
     juce::Label titleLabel;
     VolumeMeter volumeMeter; // 音量表组件

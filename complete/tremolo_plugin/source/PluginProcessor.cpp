@@ -87,6 +87,7 @@ void PluginProcessor::prepareToPlay(double sampleRate,
            getTotalNumInputChannels(), getTotalNumOutputChannels()))});
 
   latestInputLevel.store(0.0f, std::memory_order_relaxed);
+  triggerThresholdDb.store(-12.0f, std::memory_order_relaxed);
 }
 
 // 释放资源函数：在播放停止时清理资源
@@ -152,6 +153,10 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
   
   // 更新XY控制器参数（根据XY位置计算实际增益）
   tremolo.setXYValues(parameters.xValue.get(), parameters.yValue.get());
+
+  // 将UI阈值安全同步到音频线程。
+  tremolo.setThresholdDb(
+      triggerThresholdDb.load(std::memory_order_relaxed));
 
   // 设置旁路状态到过渡平滑器
   bypassTransitionSmoother.setBypass(parameters.bypassed);
@@ -229,6 +234,15 @@ double PluginProcessor::getSampleRateThreadSafe() const noexcept {
 
 float PluginProcessor::getLatestInputLevel() const noexcept {
   return latestInputLevel.load(std::memory_order_relaxed);
+}
+
+void PluginProcessor::setTriggerThresholdDb(float thresholdDb) noexcept {
+  triggerThresholdDb.store(juce::jlimit(-60.0f, 0.0f, thresholdDb),
+                           std::memory_order_relaxed);
+}
+
+float PluginProcessor::getTriggerThresholdDb() const noexcept {
+  return triggerThresholdDb.load(std::memory_order_relaxed);
 }
 
 // 命名空间结束

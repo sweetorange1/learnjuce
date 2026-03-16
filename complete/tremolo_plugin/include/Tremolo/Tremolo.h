@@ -46,6 +46,16 @@ public:
     maxGain = maxGainValue;  // 设置最大增益值
   }
 
+  // 设置触发阈值（dB）
+  void setThresholdDb(float newThresholdDb) noexcept {
+    thresholdDB = juce::jlimit(-60.0f, 0.0f, newThresholdDb);
+  }
+
+  // 获取当前触发阈值（dB）
+  float getThresholdDb() const noexcept {
+    return thresholdDB;
+  }
+
   // 主音频处理函数（添加信号拆分和电平检测）
   void process(juce::AudioBuffer<float>& buffer) noexcept {
     // Clipper阈值参数
@@ -156,7 +166,7 @@ private:
   float peakLevel = 0.0f;            // 峰值电平
   bool isFlashing = false;           // 指示灯闪烁状态
   float flashTimer = 0.0f;           // 闪烁计时器
-  const float thresholdDB = -12.0f;   // 触发阈值（-6dB）
+  float thresholdDB = -12.0f;         // 触发阈值（dB）
   const float flashDuration = 0.2f;  // 闪烁持续时间（0.5秒）
   bool wasAboveThreshold = false;    // 上次是否超过阈值
 };

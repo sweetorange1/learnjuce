@@ -69,6 +69,14 @@ void SettingsPanel::setVolumeMeterMode(bool useWaveform) {
     volumeMeter.setDisplayMode(useWaveform);
 }
 
+void SettingsPanel::setThresholdDb(float thresholdDb) {
+    volumeMeter.setThresholdDb(thresholdDb);
+}
+
+void SettingsPanel::setThresholdChangedCallback(std::function<void(float)> callback) {
+    volumeMeter.setThresholdChangedCallback(callback);
+}
+
 // XYController类的实现
 XYController::XYController() {
     // 设置XY控制器可以接收鼠标事件
@@ -242,6 +250,10 @@ PluginEditor::PluginEditor(PluginProcessor& p)
 
   // 初始化设置面板
   settingsPanel.setVisible(false); // 初始状态为隐藏
+  settingsPanel.setThresholdDb(p.getTriggerThresholdDb());
+  settingsPanel.setThresholdChangedCallback([&p](float thresholdDb) {
+      p.setTriggerThresholdDb(thresholdDb);
+  });
   addChildComponent(settingsPanel); // 作为子组件添加，但不立即显示
 
   // 初始化动画状态：设置动画系统的初始值
@@ -364,6 +376,7 @@ void PluginEditor::timerCallback() {
 
     // 将输入信号实时推送给设置面板中的滚动电平窗。
     settingsPanel.updateVolumeLevel(audioProcessor.getLatestInputLevel());
+    settingsPanel.setThresholdDb(audioProcessor.getTriggerThresholdDb());
 
     // 设置指示灯组件的闪烁状态
     indicatorLight.setFlashing(shouldFlash);
