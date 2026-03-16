@@ -3,7 +3,7 @@
 # 3.25 is required for the MSVC_DEBUG_INFORMATION_FORMAT feature to work.
 # To verify your version run
 # $ cmake --version
-cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.31.6 FATAL_ERROR)
 
 # Enable setting CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
 set(CMAKE_POLICY_DEFAULT_CMP0141        NEW      CACHE STRING "" FORCE)

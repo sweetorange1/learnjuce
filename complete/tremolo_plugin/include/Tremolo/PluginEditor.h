@@ -1,6 +1,6 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "SpectrumAnalyser.h"
+#include "VolumeMeter.h"
 
 namespace tremolo {
 
@@ -44,22 +44,17 @@ public:
     
     void setVisible(bool shouldBeVisible) override;
     
-    /**
-     * @brief 设置音频处理器引用，用于频谱分析
-     * @param processor 音频处理器引用
-     */
-    void setAudioProcessor(PluginProcessor* processor);
+    // 更新音量电平
+    void updateVolumeLevel(float level);
     
-    /**
-     * @brief 获取频谱分析器组件引用
-     * @return 频谱分析器组件引用
-     */
-    SpectrumAnalyser& getSpectrumAnalyser() { return spectrumAnalyser; }
+    // 设置显示模式
+    void setVolumeMeterMode(bool useWaveform);
     
 private:
     juce::Label titleLabel;
-    SpectrumAnalyser spectrumAnalyser; // 频谱分析器组件
-    PluginProcessor* audioProcessor{nullptr}; // 音频处理器引用
+    VolumeMeter volumeMeter; // 音量表组件
+    juce::Label volumeLabel; // 音量标签
+    juce::ToggleButton waveformToggle; // 波形显示切换按钮
 };
 
 class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
@@ -88,7 +83,7 @@ private:
   
   // 设置面板相关变量
   SettingsPanel settingsPanel;
-  bool settingsPanelVisible = false;
+  bool isSettingsPanelVisible = false;
   
   // 缓动函数：实现先快后慢和由慢变快的效果
   float easeInOutQuad(float t);

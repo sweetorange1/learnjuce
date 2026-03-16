@@ -1,32 +1,6 @@
 // 命名空间定义：将插件相关的代码组织在tremolo命名空间中，避免全局命名冲突
 namespace tremolo {
 
-// 创建参数布局：定义插件的所有参数及其属性
-juce::AudioProcessorValueTreeState::ParameterLayout PluginProcessor::createParameterLayout() {
-    juce::AudioProcessorValueTreeState::ParameterLayout layout;
-    
-    // 旁路参数
-    layout.add(std::make_unique<juce::AudioParameterBool>("bypassed", "Bypass", false));
-    
-    // 增益参数
-    layout.add(std::make_unique<juce::AudioParameterFloat>("gain", "Gain", 0.1f, 10.0f, 4.0f));
-    
-    // X值参数
-    layout.add(std::make_unique<juce::AudioParameterFloat>("xValue", "X Value", 0.0f, 1.0f, 0.5f));
-    
-    // Y值参数
-    layout.add(std::make_unique<juce::AudioParameterFloat>("yValue", "Y Value", 0.0f, 1.0f, 0.5f));
-    
-    return layout;
-}
-
-// 析构函数：清理资源
-PluginProcessor::~PluginProcessor()
-{
-    // 析构函数体为空，因为所有成员变量都是自动管理的
-    // JUCE框架会自动清理AudioProcessorValueTreeState等资源
-}
-
 // 构造函数：初始化音频处理器，设置输入输出音频总线配置
 PluginProcessor::PluginProcessor()
     // 调用基类AudioProcessor的构造函数，传入音频总线配置
@@ -36,15 +10,7 @@ PluginProcessor::PluginProcessor()
               // 设置输入总线：名称为"Input"，立体声通道，启用状态
               .withInput("Input", juce::AudioChannelSet::stereo(), true)
               // 设置输出总线：名称为"Output"，立体声通道，启用状态
-              .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      // 初始化参数管理器
-      parameters(*this, nullptr, "Parameters", createParameterLayout()),
-      // 初始化频谱分析器FIFO（缓冲区大小：8192采样点）
-      analysisFifo(8192)
-{
-    // 初始化输入分析缓冲区
-    inputBufferForAnalysis.setSize(2, 8192); // 立体声，8192采样点
-}
+              .withOutput("Output", juce::AudioChannelSet::stereo(), true)) {}
 
 // 获取插件名称：返回插件的标识名称，JUCE框架调用此函数获取插件信息
 const juce::String PluginProcessor::getName() const {
@@ -120,9 +86,7 @@ void PluginProcessor::prepareToPlay(double sampleRate,
        .numChannels = static_cast<uint32_t>(juce::jmax(
            getTotalNumInputChannels(), getTotalNumOutputChannels()))});
 
-  // 重置频谱分析器FIFO
-  analysisFifo.reset();
-  inputBufferForAnalysis.clear();
+  latestInputLevel.store(0.0f, std::memory_order_relaxed);
 }
 
 // 释放资源函数：在播放停止时清理资源
@@ -130,10 +94,7 @@ void PluginProcessor::releaseResources() {
   // 当播放停止时，您可以使用此机会释放任何空闲内存等
   tremolo.reset();
   bypassTransitionSmoother.reset();
-  
-  // 清空频谱分析器缓冲区
-  analysisFifo.reset();
-  inputBufferForAnalysis.clear();
+  latestInputLevel.store(0.0f, std::memory_order_relaxed);
 }
 
 // 检查音频总线布局是否受支持：验证宿主程序提供的音频配置是否兼容
@@ -166,6 +127,13 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
   const auto totalNumInputChannels = getTotalNumInputChannels();
   const auto totalNumOutputChannels = getTotalNumOutputChannels();
 
+  float inputPeak = 0.0f;
+  const auto numSamples = buffer.getNumSamples();
+  for (int channel = 0; channel < totalNumInputChannels; ++channel) {
+    inputPeak = juce::jmax(inputPeak, buffer.getMagnitude(channel, 0, numSamples));
+  }
+  latestInputLevel.store(inputPeak, std::memory_order_relaxed);
+
   // 如果我们有比输入更多的输出通道，此代码会清除任何不包含输入数据的输出通道
   // （因为这些通道不保证为空 - 它们可能包含垃圾数据）
   // 这是为了避免人们在首次编译插件时获得尖叫反馈
@@ -177,43 +145,16 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 
   // 检查是否处于完全旁路状态且没有过渡过程
   const auto bypassedAndNotTransitioning =
-      getParameterRefs().bypassed.get();
+      parameters.bypassed.get() && !bypassTransitionSmoother.isTransitioning();
 
   // 更新最大增益值
-  tremolo.setMaxGain(getParameterRefs().gain.get());
+  tremolo.setMaxGain(parameters.gain.get());
   
   // 更新XY控制器参数（根据XY位置计算实际增益）
-  tremolo.setXYValues(getParameterRefs().xValue.get(), getParameterRefs().yValue.get());
+  tremolo.setXYValues(parameters.xValue.get(), parameters.yValue.get());
 
   // 设置旁路状态到过渡平滑器
-  bypassTransitionSmoother.setWetMixProportion(getParameterRefs().bypassed.get() ? 0.0f : 1.0f);
-
-  // 如果频谱分析器激活，保存输入音频数据用于分析
-  if (spectrumAnalyserActive && totalNumInputChannels > 0) {
-    const int numSamples = buffer.getNumSamples();
-    
-    // 检查FIFO是否有足够空间
-    if (analysisFifo.getFreeSpace() >= numSamples) {
-      int start1, block1, start2, block2;
-      analysisFifo.prepareToWrite(numSamples, start1, block1, start2, block2);
-      
-      // 写入左声道数据
-      if (block1 > 0)
-        inputBufferForAnalysis.copyFrom(0, start1, buffer.getReadPointer(0), block1);
-      if (block2 > 0)
-        inputBufferForAnalysis.copyFrom(0, start2, buffer.getReadPointer(0, block1), block2);
-      
-      // 写入右声道数据（如果存在）
-      if (totalNumInputChannels > 1) {
-        if (block1 > 0)
-          inputBufferForAnalysis.addFrom(1, start1, buffer.getReadPointer(1), block1);
-        if (block2 > 0)
-          inputBufferForAnalysis.addFrom(1, start2, buffer.getReadPointer(1, block1), block2);
-      }
-      
-      analysisFifo.finishedWrite(block1 + block2);
-    }
-  }
+  bypassTransitionSmoother.setBypass(parameters.bypassed);
 
   // 如果插件完全旁路，避免处理音频数据
   if (bypassedAndNotTransitioning) {
@@ -221,62 +162,13 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
   }
 
   // 设置干信号缓冲区（原始输入信号）
-  juce::dsp::AudioBlock<float> dryBlock(buffer);
-  bypassTransitionSmoother.pushDrySamples(dryBlock);
+  bypassTransitionSmoother.setDryBuffer(buffer);
 
   // 应用颤音效果到音频缓冲区
   tremolo.process(buffer);
 
   // 将处理后的湿信号与干信号混合
-  juce::dsp::AudioBlock<float> wetBlock(buffer);
-  bypassTransitionSmoother.mixWetSamples(wetBlock);
-}
-
-// 频谱分析器相关方法实现
-void PluginProcessor::getInputAudioForAnalysis(juce::AudioBuffer<float>& buffer, int maxSamples)
-{
-    if (!spectrumAnalyserActive) return;
-    
-    const int numReady = analysisFifo.getNumReady();
-    const int samplesToRead = juce::jmin(maxSamples, numReady);
-    
-    if (samplesToRead > 0) {
-        buffer.setSize(1, samplesToRead); // 只返回单声道数据
-        buffer.clear();
-        
-        int start1, block1, start2, block2;
-        analysisFifo.prepareToRead(samplesToRead, start1, block1, start2, block2);
-        
-        // 读取左声道数据
-        if (block1 > 0)
-            buffer.copyFrom(0, 0, inputBufferForAnalysis.getReadPointer(0, start1), block1);
-        if (block2 > 0)
-            buffer.copyFrom(0, block1, inputBufferForAnalysis.getReadPointer(0, start2), block2);
-        
-        // 如果存在右声道，混合到单声道
-        if (inputBufferForAnalysis.getNumChannels() > 1) {
-            if (block1 > 0)
-                buffer.addFrom(0, 0, inputBufferForAnalysis.getReadPointer(1, start1), block1);
-            if (block2 > 0)
-                buffer.addFrom(0, block1, inputBufferForAnalysis.getReadPointer(1, start2), block2);
-            
-            // 平均左右声道
-            buffer.applyGain(0.5f);
-        }
-        
-        analysisFifo.finishedRead(block1 + block2);
-    }
-}
-
-void PluginProcessor::setSpectrumAnalyserActive(bool shouldBeActive)
-{
-    spectrumAnalyserActive = shouldBeActive;
-    
-    if (!shouldBeActive) {
-        // 停用时清空缓冲区
-        analysisFifo.reset();
-        inputBufferForAnalysis.clear();
-    }
+  bypassTransitionSmoother.mixToWetBuffer(buffer);
 }
 
 // 检查是否有自定义编辑器：返回true表示插件有图形界面
@@ -294,9 +186,8 @@ juce::AudioProcessorEditor* PluginProcessor::createEditor() {
 void PluginProcessor::getStateInformation(juce::MemoryBlock& destData) {
   // 创建内存输出流用于序列化数据
   juce::MemoryOutputStream outputStream{destData, true};
-  // 创建Parameters实例并传递给JSON序列化器
-  Parameters params(*this);
-  JsonSerializer::serialize(params, outputStream);
+  // 使用JSON序列化器保存参数状态
+  JsonSerializer::serialize(parameters, outputStream);
 }
 
 // 从内存块加载插件状态：反序列化参数状态
@@ -304,9 +195,8 @@ void PluginProcessor::setStateInformation(const void* data, int sizeInBytes) {
   // 创建内存输入流读取序列化数据
   juce::MemoryInputStream inputStream{data, static_cast<size_t>(sizeInBytes),
                                       false};
-  // 创建Parameters实例并传递给JSON序列化器
-  Parameters params(*this);
-  const auto result = JsonSerializer::deserialize(inputStream, params);
+  // 使用JSON序列化器加载参数状态
+  const auto result = JsonSerializer::deserialize(inputStream, parameters);
 
   // 检查反序列化是否成功
   if (result.failed()) {
@@ -316,24 +206,29 @@ void PluginProcessor::setStateInformation(const void* data, int sizeInBytes) {
   }
 
   // 设置旁路状态
-  bypassTransitionSmoother.setWetMixProportion(getParameterRefs().bypassed.get() ? 0.0f : 1.0f);
+  bypassTransitionSmoother.setBypassForced(parameters.bypassed);
 }
 
-// 获取参数引用：返回参数引用结构体
-PluginProcessor::ParameterRefs& PluginProcessor::getParameterRefs() {
-  static ParameterRefs refs{
-    .bypassed = *dynamic_cast<juce::AudioParameterBool*>(parameters.getParameter("bypassed")),
-    .gain = *dynamic_cast<juce::AudioParameterFloat*>(parameters.getParameter("gain")),
-    .xValue = *dynamic_cast<juce::AudioParameterFloat*>(parameters.getParameter("xValue")),
-    .yValue = *dynamic_cast<juce::AudioParameterFloat*>(parameters.getParameter("yValue"))
-  };
-  return refs;
+// 获取参数引用：返回参数管理对象的引用
+Parameters& PluginProcessor::getParameterRefs() noexcept {
+  return parameters;
 }
 
 // 获取旁路参数：返回旁路参数的指针
 juce::AudioProcessorParameter* PluginProcessor::getBypassParameter()
     const noexcept {
-  return parameters.getParameter("bypassed");
+  return &parameters.bypassed;
+}
+
+
+
+// 线程安全地获取采样率：在多线程环境中安全获取当前采样率
+double PluginProcessor::getSampleRateThreadSafe() const noexcept {
+  return currentSampleRate;
+}
+
+float PluginProcessor::getLatestInputLevel() const noexcept {
+  return latestInputLevel.load(std::memory_order_relaxed);
 }
 
 // 命名空间结束

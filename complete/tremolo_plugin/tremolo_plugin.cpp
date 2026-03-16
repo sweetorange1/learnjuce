@@ -4,6 +4,7 @@
 #include "source/CustomLookAndFeel.cpp"
 #include "source/JsonSerializer.cpp"
 #include "source/Parameters.cpp"
+#include "source/VolumeMeter.cpp"
 #include "source/PluginEditor.cpp"
 #include "source/PluginProcessor.cpp"
 #include "source/SpectrumAnalyser.cpp"

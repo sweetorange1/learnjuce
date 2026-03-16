@@ -9,13 +9,21 @@ SettingsPanel::SettingsPanel() {
     titleLabel.setFont(juce::Font(18.0f, juce::Font::bold));
     titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(titleLabel);
-    
-    // 添加频谱分析器组件
-    addAndMakeVisible(spectrumAnalyser);
-    
-    // 设置频谱分析器初始状态
-    spectrumAnalyser.setupAnalyser(44100.0, 11); // 2048点FFT，良好频率分辨率
-    spectrumAnalyser.setActive(false); // 初始不激活
+
+    volumeLabel.setText("Input Level", juce::dontSendNotification);
+    volumeLabel.setJustificationType(juce::Justification::centredLeft);
+    volumeLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible(volumeLabel);
+
+    waveformToggle.setButtonText("Scrolling Curve");
+    waveformToggle.setToggleState(true, juce::dontSendNotification);
+    waveformToggle.onClick = [this]() {
+        setVolumeMeterMode(waveformToggle.getToggleState());
+    };
+    addAndMakeVisible(waveformToggle);
+
+    volumeMeter.setDisplayMode(true);
+    addAndMakeVisible(volumeMeter);
 }
 
 void SettingsPanel::paint(juce::Graphics& g) {
@@ -30,22 +38,17 @@ void SettingsPanel::paint(juce::Graphics& g) {
 
 void SettingsPanel::resized() {
     // 设置标题标签的位置（顶部居中）
-    auto titleBounds = getLocalBounds().removeFromTop(40);
+    auto content = getLocalBounds().reduced(16);
+    auto titleBounds = content.removeFromTop(36);
     titleLabel.setBounds(titleBounds);
-    
-    // 设置频谱分析器的位置和大小
-    // 根据用户要求设置尺寸：宽度约80%，高度约40%
-    const int panelWidth = getWidth();
-    const int panelHeight = getHeight();
-    
-    const int spectrumWidth = static_cast<int>(panelWidth * 0.8f);
-    const int spectrumHeight = static_cast<int>(panelHeight * 0.4f);
-    
-    // 居中放置频谱分析器
-    const int spectrumX = (panelWidth - spectrumWidth) / 2;
-    const int spectrumY = 60; // 位于面板上半部分
-    
-    spectrumAnalyser.setBounds(spectrumX, spectrumY, spectrumWidth, spectrumHeight);
+
+    content.removeFromTop(12);
+    auto controls = content.removeFromTop(26);
+    volumeLabel.setBounds(controls.removeFromLeft(120));
+    waveformToggle.setBounds(controls.removeFromLeft(170));
+
+    content.removeFromTop(10);
+    volumeMeter.setBounds(content.removeFromTop(120));
 }
 
 void SettingsPanel::setVisible(bool shouldBeVisible) {
@@ -55,26 +58,16 @@ void SettingsPanel::setVisible(bool shouldBeVisible) {
     if (shouldBeVisible) {
         toFront(false);
     }
-    
-    // 控制频谱分析器的激活状态
-    spectrumAnalyser.setActive(shouldBeVisible);
-    
-    // 通知音频处理器频谱分析器状态变化
-    if (audioProcessor != nullptr) {
-        audioProcessor->setSpectrumAnalyserActive(shouldBeVisible);
-    }
 }
 
-void SettingsPanel::setAudioProcessor(PluginProcessor* processor) {
-    audioProcessor = processor;
-    
-    if (audioProcessor != nullptr) {
-        // 设置频谱分析器的采样率
-        spectrumAnalyser.setupAnalyser(audioProcessor->getSampleRateThreadSafe(), 11);
-    }
+void SettingsPanel::updateVolumeLevel(float level) {
+    volumeMeter.updateLevel(level);
 }
 
-
+void SettingsPanel::setVolumeMeterMode(bool useWaveform) {
+    waveformToggle.setToggleState(useWaveform, juce::dontSendNotification);
+    volumeMeter.setDisplayMode(useWaveform);
+}
 
 // XYController类的实现
 XYController::XYController() {
@@ -123,6 +116,21 @@ void XYController::paint(juce::Graphics& g) {
     g.setColour(juce::Colour(0x00000000));
     g.fillRect(bounds);
     
+    // // 绘制网格线
+    // g.setColour(juce::Colour(0xFF555555));
+    //
+    // // 水平网格线
+    // for (int i = 1; i < 4; ++i) {
+    //     float y = bounds.getHeight() * i / 4.0f;
+    //     g.drawLine(0.0f, y, bounds.getWidth(), y, 1.0f);
+    // }
+    //
+    // // 垂直网格线
+    // for (int i = 1; i < 4; ++i) {
+    //     float x = bounds.getWidth() * i / 4.0f;
+    //     g.drawLine(x, 0.0f, x, bounds.getHeight(), 1.0f);
+    // }
+    //
     // 绘制边框
     g.setColour(juce::Colour(0xFF888888));
     g.drawRect(bounds, 2.0f);
@@ -221,11 +229,11 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   // 设置按钮点击事件
   settingsButton.onClick = [this]() {
       // 切换设置面板的可见状态
-      settingsPanelVisible = !settingsPanelVisible;
-      settingsPanel.setVisible(settingsPanelVisible);
+      isSettingsPanelVisible = !isSettingsPanelVisible;
+      settingsPanel.setVisible(isSettingsPanelVisible);
       
       // 如果设置面板可见，将其置于最顶层
-      if (settingsPanelVisible) {
+      if (isSettingsPanelVisible) {
           settingsPanel.toFront(false);
       }
   };
@@ -233,7 +241,6 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   addAndMakeVisible(settingsButton);
 
   // 初始化设置面板
-  settingsPanel.setAudioProcessor(&p); // 设置音频处理器引用
   settingsPanel.setVisible(false); // 初始状态为隐藏
   addChildComponent(settingsPanel); // 作为子组件添加，但不立即显示
 
@@ -294,7 +301,7 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   gainSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   gainSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
   gainSlider.setRange(0.1, 10.0, 0.1); // 增益范围从0.1到10.0，步进0.1
-  gainSlider.setValue(4.0); // 默认增益为4.0
+  gainSlider.setValue(1.0); // 默认增益为1.0
   addAndMakeVisible(gainSlider);
 
   // // 设置指示灯标签
@@ -354,19 +361,12 @@ void PluginEditor::timerCallback() {
     
     // 获取指示灯当前是否应该闪烁的状态
     bool shouldFlash = audioProcessor.getTremolo().shouldFlashIndicator();
-    
+
+    // 将输入信号实时推送给设置面板中的滚动电平窗。
+    settingsPanel.updateVolumeLevel(audioProcessor.getLatestInputLevel());
+
     // 设置指示灯组件的闪烁状态
     indicatorLight.setFlashing(shouldFlash);
-    
-    // 如果设置面板可见，更新频谱分析器数据
-    if (settingsPanelVisible && settingsPanel.isVisible()) {
-        juce::AudioBuffer<float> audioData;
-        audioProcessor.getInputAudioForAnalysis(audioData, 1024);
-        
-        if (audioData.getNumSamples() > 0) {
-            settingsPanel.getSpectrumAnalyser().addAudioData(audioData);
-        }
-    }
     
   // 动画触发逻辑：当指示灯亮起且当前没有动画运行时，开始新动画
   if (shouldFlash && !isAnimating) {
