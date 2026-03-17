@@ -329,10 +329,18 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   
   // 设置背景图片：从内存中加载背景图片资源
   // juce::ImageCache::getFromMemory：JUCE的图片缓存系统，从二进制数据创建图片
-  background.setImage(juce::ImageCache::getFromMemory(
-      assets::Background_png, assets::Background_pngSize));
+  const auto bgImage = juce::ImageCache::getFromMemory(
+      assets::Background_png, assets::Background_pngSize);
+  background.setImage(bgImage);
   // 将背景组件添加到界面并使其可见
   addAndMakeVisible(background);
+
+  // 让编辑器尺寸自动跟随背景图实际尺寸（便于替换背景图时无需手动改setSize）
+  if (bgImage.isValid() && bgImage.getWidth() > 0 && bgImage.getHeight() > 0) {
+      setSize(bgImage.getWidth(), bgImage.getHeight());
+  } else {
+      setSize(700, 700);
+  }
 
   // 设置jj.png图片：从文件加载图片资源
   juce::File jjImageFile("J:/C++/myfirst/complete/assets/jj.png");
@@ -487,11 +495,9 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   // 设置自定义外观：将lookAndFeel对象设置为当前组件的外观
   setLookAndFeel(&lookAndFeel);
 
-  // 注释：确保在构造函数完成前设置编辑器的大小
+  // 注释：编辑器大小在上方根据Background图片实际尺寸自动设置
   // Make sure that before the constructor has finished, you've set the
   // editor's size to whatever you need it to be.
-  // 设置编辑器大小为700x700像素
-  setSize(700, 700);
 }
 
 // PluginEditor类的析构函数：在对象销毁时自动调用
@@ -596,16 +602,17 @@ void PluginEditor::resized() {
   // 计算增益控制区域的边界：顶部区域，高度80像素
   auto gainArea = bounds.removeFromTop(40);
   
-  // 设置增益标签：左侧，宽度60像素
-  auto gainLabelBounds = gainArea.removeFromLeft(60);
-  gainLabel.setBounds(gainLabelBounds);
+  // // 设置增益标签：左侧，宽度60像素
+  // auto gainLabelBounds = gainArea.removeFromLeft(60);
+  // gainLabel.setBounds(gainLabelBounds);
   
-  // 设置增益控制条：剩余区域，左右留出20像素边距
-  gainArea.reduce(20, 0);
-  gainSlider.setBounds(gainArea);
+  // // 设置增益控制条：剩余区域，左右留出20像素边距
+  // gainArea.reduce(20, 0);
+  // gainSlider.setBounds(gainArea);
 
-  // 计算XY控制器的边界：正方形，位于界面中央向上150像素，大小为600x600像素
-  auto xyBounds = bounds.withSizeKeepingCentre(600, 600).translated(0, -20);
+  // 计算XY控制器的边界：正方形，尺寸随界面大小自适应
+  const auto xySide = juce::jmax(200, juce::jmin(bounds.getWidth(), bounds.getHeight()) - 120);
+  auto xyBounds = bounds.withSizeKeepingCentre(xySide, xySide).translated(0, -20);
   xyController.setBounds(xyBounds);
 
   // 计算旁路按钮的边界：右上角区域
@@ -628,10 +635,10 @@ void PluginEditor::resized() {
   auto indicatorArea = bounds.removeFromTop(120);
   indicatorArea.removeFromTop(80); // 移除增益控制区域
   
-  // 设置指示灯标签：左侧，宽度60像素
-  auto indicatorLabelBounds = indicatorArea.removeFromLeft(60);
-  indicatorLabel.setBounds(indicatorLabelBounds);
-  
+  // // 设置指示灯标签：左侧，宽度60像素
+  // auto indicatorLabelBounds = indicatorArea.removeFromLeft(60);
+  // indicatorLabel.setBounds(indicatorLabelBounds);
+  //
   // 设置指示灯：右侧，圆形，直径40像素
   auto indicatorLightBounds = indicatorArea.removeFromRight(60);
   indicatorLightBounds = indicatorLightBounds.withSizeKeepingCentre(40, 40);
