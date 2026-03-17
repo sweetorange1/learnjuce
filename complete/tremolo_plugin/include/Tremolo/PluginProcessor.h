@@ -52,6 +52,12 @@ public:
   /** Returns latest input peak (linear gain 0..1+) sampled on audio thread. */
   float getLatestInputLevel() const noexcept;
 
+  /** Returns latest windowed input peak (linear gain 0..1+) computed across multiple blocks. */
+  float getLatestWindowedInputPeak() const noexcept;
+
+  void setLevelCaptureWindowMs(float windowMs) noexcept;
+  float getLevelCaptureWindowMs() const noexcept;
+
   void setTriggerThresholdDb(float thresholdDb) noexcept;
   float getTriggerThresholdDb() const noexcept;
   void setInputFilterFrequencies(float highpassHz, float lowpassHz) noexcept;
@@ -62,12 +68,16 @@ private:
   void updateDetectionFilterCoefficients(float highpassHz,
                                          float lowpassHz) noexcept;
   float analyseFilteredInputPeak(const juce::AudioBuffer<float>& buffer) noexcept;
+  void pushFilteredSamplesAndMaybeUpdateWindowPeak(
+      const juce::AudioBuffer<float>& buffer) noexcept;
+  void resetLevelCaptureState() noexcept;
 
   Parameters parameters{*this};
   Tremolo tremolo;
   BypassTransitionSmoother bypassTransitionSmoother;
   std::atomic<double> currentSampleRate{0.};
   std::atomic<float> latestInputLevel{0.0f};
+  std::atomic<float> latestWindowedInputPeak{0.0f};
   std::atomic<float> triggerThresholdDb{-12.0f};
   std::atomic<float> inputHighpassHz{20.0f};
   std::atomic<float> inputLowpassHz{20000.0f};
@@ -75,6 +85,11 @@ private:
   std::vector<juce::IIRFilter> detectionLowpassFilters;
   float activeInputHighpassHz{20.0f};
   float activeInputLowpassHz{20000.0f};
+
+  // 电平捕捉窗口（跨多个block累计）
+  int levelCaptureTargetSamples{0};
+  int levelCaptureAccumulatedSamples{0};
+  float levelCaptureRunningPeak{0.0f};
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginProcessor)
 };

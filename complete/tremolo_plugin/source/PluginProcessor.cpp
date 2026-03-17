@@ -1,3 +1,5 @@
+#include <cmath>
+
 // 命名空间定义：将插件相关的代码组织在tremolo命名空间中，避免全局命名冲突
 namespace tremolo {
 
@@ -95,7 +97,10 @@ void PluginProcessor::prepareToPlay(double sampleRate,
   updateDetectionFilterCoefficients(activeInputHighpassHz, activeInputLowpassHz);
 
   latestInputLevel.store(0.0f, std::memory_order_relaxed);
+  latestWindowedInputPeak.store(0.0f, std::memory_order_relaxed);
   triggerThresholdDb.store(-12.0f, std::memory_order_relaxed);
+
+  resetLevelCaptureState();
 }
 
 // 释放资源函数：在播放停止时清理资源
@@ -106,6 +111,8 @@ void PluginProcessor::releaseResources() {
   detectionHighpassFilters.clear();
   detectionLowpassFilters.clear();
   latestInputLevel.store(0.0f, std::memory_order_relaxed);
+  latestWindowedInputPeak.store(0.0f, std::memory_order_relaxed);
+  resetLevelCaptureState();
 }
 
 // 检查音频总线布局是否受支持：验证宿主程序提供的音频配置是否兼容
@@ -145,10 +152,13 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     updateDetectionFilterCoefficients(desiredHighpassHz, desiredLowpassHz);
   }
 
-  const auto inputPeak = analyseFilteredInputPeak(buffer);
-  latestInputLevel.store(inputPeak, std::memory_order_relaxed);
+  // 统一电平捕捉：跨多个block累计samples，累计到目标窗口长度后计算一次peak。
+  pushFilteredSamplesAndMaybeUpdateWindowPeak(buffer);
+
+  const auto windowedPeak = latestWindowedInputPeak.load(std::memory_order_relaxed);
+  latestInputLevel.store(windowedPeak, std::memory_order_relaxed);
   tremolo.setThresholdDb(triggerThresholdDb.load(std::memory_order_relaxed));
-  tremolo.updateDetectionPeak(inputPeak);
+  tremolo.updateDetectionPeak(windowedPeak);
 
   // 如果我们有比输入更多的输出通道，此代码会清除任何不包含输入数据的输出通道
   // （因为这些通道不保证为空 - 它们可能包含垃圾数据）
@@ -247,6 +257,19 @@ float PluginProcessor::getLatestInputLevel() const noexcept {
   return latestInputLevel.load(std::memory_order_relaxed);
 }
 
+float PluginProcessor::getLatestWindowedInputPeak() const noexcept {
+  return latestWindowedInputPeak.load(std::memory_order_relaxed);
+}
+
+void PluginProcessor::setLevelCaptureWindowMs(float windowMs) noexcept {
+  const auto normalized = parameters.levelCaptureWindowMs.convertTo0to1(windowMs);
+  parameters.levelCaptureWindowMs.setValueNotifyingHost(normalized);
+}
+
+float PluginProcessor::getLevelCaptureWindowMs() const noexcept {
+  return parameters.levelCaptureWindowMs.get();
+}
+
 void PluginProcessor::setTriggerThresholdDb(float thresholdDb) noexcept {
   triggerThresholdDb.store(juce::jlimit(-60.0f, 0.0f, thresholdDb),
                            std::memory_order_relaxed);
@@ -331,6 +354,59 @@ float PluginProcessor::analyseFilteredInputPeak(
   }
 
   return detectedPeak;
+}
+
+void PluginProcessor::resetLevelCaptureState() noexcept {
+  levelCaptureAccumulatedSamples = 0;
+  levelCaptureRunningPeak = 0.0f;
+  levelCaptureTargetSamples = 0;
+}
+
+void PluginProcessor::pushFilteredSamplesAndMaybeUpdateWindowPeak(
+    const juce::AudioBuffer<float>& buffer) noexcept {
+  const auto inputChannelCount = juce::jmin(
+      buffer.getNumChannels(), static_cast<int>(detectionHighpassFilters.size()));
+
+  const auto numSamples = buffer.getNumSamples();
+  if (inputChannelCount <= 0 || numSamples <= 0) {
+    return;
+  }
+
+  const auto sampleRate = juce::jmax(1.0, getSampleRateThreadSafe());
+  const auto windowMs = parameters.levelCaptureWindowMs.get();
+  const auto windowSeconds = juce::jmax(0.001, static_cast<double>(windowMs) / 1000.0);
+  const auto targetSamples = juce::jmax(1, static_cast<int>(std::llround(windowSeconds * sampleRate)));
+
+  if (targetSamples != levelCaptureTargetSamples) {
+    levelCaptureTargetSamples = targetSamples;
+    levelCaptureAccumulatedSamples = 0;
+    levelCaptureRunningPeak = 0.0f;
+  }
+
+  // 在本block中逐sample分析（带通滤波后取abs peak），累计到窗口长度后“结算”一次peak。
+  for (int sample = 0; sample < numSamples; ++sample) {
+    float detectedAbs = 0.0f;
+
+    for (int channel = 0; channel < inputChannelCount; ++channel) {
+      const auto* readPointer = buffer.getReadPointer(channel);
+      auto& highpassFilter = detectionHighpassFilters[static_cast<size_t>(channel)];
+      auto& lowpassFilter = detectionLowpassFilters[static_cast<size_t>(channel)];
+
+      const auto highpassed = highpassFilter.processSingleSampleRaw(readPointer[sample]);
+      const auto bandLimited = lowpassFilter.processSingleSampleRaw(highpassed);
+      detectedAbs = juce::jmax(detectedAbs, std::abs(bandLimited));
+    }
+
+    levelCaptureRunningPeak = juce::jmax(levelCaptureRunningPeak, detectedAbs);
+    ++levelCaptureAccumulatedSamples;
+
+    if (levelCaptureAccumulatedSamples >= levelCaptureTargetSamples) {
+      latestWindowedInputPeak.store(levelCaptureRunningPeak,
+                                    std::memory_order_relaxed);
+      levelCaptureAccumulatedSamples = 0;
+      levelCaptureRunningPeak = 0.0f;
+    }
+  }
 }
 
 // 命名空间结束

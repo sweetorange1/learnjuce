@@ -25,6 +25,30 @@ SettingsPanel::SettingsPanel() {
     volumeMeter.setDisplayMode(true);
     addAndMakeVisible(volumeMeter);
 
+    levelWindowLabel.setText("Level Window", juce::dontSendNotification);
+    levelWindowLabel.setJustificationType(juce::Justification::centredLeft);
+    levelWindowLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible(levelWindowLabel);
+
+    levelWindowSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    levelWindowSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    levelWindowSlider.setRange(5.0, 500.0, 1.0);
+    levelWindowSlider.setSkewFactorFromMidPoint(50.0);
+    levelWindowSlider.setValue(50.0, juce::dontSendNotification);
+    levelWindowSlider.onValueChange = [this]() {
+        const auto windowMs = static_cast<float>(levelWindowSlider.getValue());
+        updateLevelWindowText(windowMs);
+        if (levelWindowChangedCallback) {
+            levelWindowChangedCallback(windowMs);
+        }
+    };
+    addAndMakeVisible(levelWindowSlider);
+
+    levelWindowValueLabel.setJustificationType(juce::Justification::centredLeft);
+    levelWindowValueLabel.setColour(juce::Label::textColourId,
+                                    juce::Colours::white.withAlpha(0.75f));
+    addAndMakeVisible(levelWindowValueLabel);
+
     inputFilterLabel.setText("Input Filter", juce::dontSendNotification);
     inputFilterLabel.setJustificationType(juce::Justification::centredLeft);
     inputFilterLabel.setColour(juce::Label::textColourId, juce::Colours::white);
@@ -52,6 +76,7 @@ SettingsPanel::SettingsPanel() {
     addAndMakeVisible(inputFilterValueLabel);
 
     updateInputFilterText(20.0f, 20000.0f);
+    updateLevelWindowText(50.0f);
 }
 
 void SettingsPanel::paint(juce::Graphics& g) {
@@ -77,6 +102,15 @@ void SettingsPanel::resized() {
 
     content.removeFromTop(10);
     volumeMeter.setBounds(content.removeFromTop(160));
+
+    content.removeFromTop(12);
+    levelWindowLabel.setBounds(content.removeFromTop(24));
+
+    content.removeFromTop(6);
+    levelWindowSlider.setBounds(content.removeFromTop(28));
+
+    content.removeFromTop(4);
+    levelWindowValueLabel.setBounds(content.removeFromTop(20));
 
     content.removeFromTop(12);
     inputFilterLabel.setBounds(content.removeFromTop(24));
@@ -114,6 +148,15 @@ void SettingsPanel::setThresholdChangedCallback(std::function<void(float)> callb
     volumeMeter.setThresholdChangedCallback(callback);
 }
 
+void SettingsPanel::setLevelCaptureWindowMs(float windowMs) {
+    levelWindowSlider.setValue(windowMs, juce::dontSendNotification);
+    updateLevelWindowText(windowMs);
+}
+
+void SettingsPanel::setLevelCaptureWindowChangedCallback(std::function<void(float)> callback) {
+    levelWindowChangedCallback = callback;
+}
+
 void SettingsPanel::setInputFilterFrequencies(float highpassHz, float lowpassHz) {
     inputFilterSlider.setMinAndMaxValues(highpassHz, lowpassHz,
                                          juce::dontSendNotification);
@@ -134,6 +177,11 @@ void SettingsPanel::updateInputFilterText(float highpassHz, float lowpassHz) {
 
     inputFilterValueLabel.setText("HP " + formatFrequency(highpassHz) +
                                       "   LP " + formatFrequency(lowpassHz),
+                                  juce::dontSendNotification);
+}
+
+void SettingsPanel::updateLevelWindowText(float windowMs) {
+    levelWindowValueLabel.setText("Window " + juce::String(windowMs, 0) + " ms",
                                   juce::dontSendNotification);
 }
 
@@ -326,6 +374,12 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   settingsPanel.setThresholdChangedCallback([&p](float thresholdDb) {
       p.setTriggerThresholdDb(thresholdDb);
   });
+
+  settingsPanel.setLevelCaptureWindowMs(p.getLevelCaptureWindowMs());
+  settingsPanel.setLevelCaptureWindowChangedCallback([&p](float windowMs) {
+      p.setLevelCaptureWindowMs(windowMs);
+  });
+
   settingsPanel.setInputFilterFrequencies(p.getInputHighpassHz(),
                                           p.getInputLowpassHz());
   settingsPanel.setInputFilterChangedCallback(
@@ -467,6 +521,7 @@ void PluginEditor::timerCallback() {
     // 将输入信号实时推送给设置面板中的滚动电平窗。
     settingsPanel.updateVolumeLevel(audioProcessor.getLatestInputLevel());
     settingsPanel.setThresholdDb(audioProcessor.getTriggerThresholdDb());
+    settingsPanel.setLevelCaptureWindowMs(audioProcessor.getLevelCaptureWindowMs());
     settingsPanel.setInputFilterFrequencies(audioProcessor.getInputHighpassHz(),
                                             audioProcessor.getInputLowpassHz());
 

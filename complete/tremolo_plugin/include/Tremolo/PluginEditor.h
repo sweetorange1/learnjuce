@@ -55,17 +55,28 @@ public:
 
     void setThresholdDb(float thresholdDb);
     void setThresholdChangedCallback(std::function<void(float)> callback);
+
+    void setLevelCaptureWindowMs(float windowMs);
+    void setLevelCaptureWindowChangedCallback(std::function<void(float)> callback);
+
     void setInputFilterFrequencies(float highpassHz, float lowpassHz);
     void setInputFilterChangedCallback(
         std::function<void(float, float)> callback);
 
 private:
     void updateInputFilterText(float highpassHz, float lowpassHz);
+    void updateLevelWindowText(float windowMs);
 
     juce::Label titleLabel;
     VolumeMeter volumeMeter; // 音量表组件
     juce::Label volumeLabel; // 音量标签
     juce::ToggleButton waveformToggle; // 波形显示切换按钮
+
+    juce::Label levelWindowLabel; // 电平捕捉窗口标签
+    juce::Slider levelWindowSlider; // 电平捕捉窗口控制条
+    juce::Label levelWindowValueLabel; // 电平捕捉窗口数值显示
+    std::function<void(float)> levelWindowChangedCallback;
+
     juce::Label inputFilterLabel; // 输入检测滤波器标签
     juce::Slider inputFilterSlider; // 双端点频率范围控制器
     juce::Label inputFilterValueLabel; // 当前滤波器频率文本

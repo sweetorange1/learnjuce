@@ -1,4 +1,3 @@
-
 namespace tremolo {
 namespace {
 auto& addParameterToProcessor(juce::AudioProcessor& processor, auto parameter) {
@@ -69,6 +68,19 @@ juce::AudioParameterFloat& createGainParameter(
           juce::NormalisableRange<float>{0.1f, 10.0f, 0.1f}, 1.0f,
           juce::AudioParameterFloatAttributes{}.withLabel("x")));
 }
+
+juce::AudioParameterFloat& createLevelCaptureWindowMsParameter(
+    juce::AudioProcessor& processor) {
+  constexpr auto versionHint = 1;
+  return addParameterToProcessor(
+      processor,
+      std::make_unique<juce::AudioParameterFloat>(
+          juce::ParameterID{"level.captureWindowMs", versionHint},
+          "Level capture window",
+          juce::NormalisableRange<float>{5.0f, 500.0f, 1.0f, 0.4f},
+          50.0f,
+          juce::AudioParameterFloatAttributes{}.withLabel("ms")));
+}
 }  // namespace
 
 Parameters::Parameters(juce::AudioProcessor& processor)
@@ -77,5 +89,6 @@ Parameters::Parameters(juce::AudioProcessor& processor)
       waveform{createWaveformParameter(processor)},
       xValue{createXValueParameter(processor)},
       yValue{createYValueParameter(processor)},
-      gain{createGainParameter(processor)} {}
+      gain{createGainParameter(processor)},
+      levelCaptureWindowMs{createLevelCaptureWindowMsParameter(processor)} {}
 }  // namespace tremolo

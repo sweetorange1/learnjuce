@@ -6,15 +6,16 @@ struct SerializableParameters {
   float x{0.5f};
   float y{0.5f};
   float gain{1.0f};
+  float levelCaptureWindowMs{50.0f};
 
-  static constexpr auto marshallingVersion = 2;
+  static constexpr auto marshallingVersion = 3;
 
   template <typename Archive, typename T>
   static void serialise(Archive& archive, T& p) {
     using namespace juce;
 
     const auto version = archive.getVersion();
-    if (version != 1 && version != 2) {
+    if (version != 1 && version != 2 && version != 3) {
       return;
     }
 
@@ -32,6 +33,10 @@ struct SerializableParameters {
     if (version >= 2) {
       archive(named("xyX", p.x), named("xyY", p.y), named("gain", p.gain));
     }
+
+    if (version >= 3) {
+      archive(named("levelCaptureWindowMs", p.levelCaptureWindowMs));
+    }
   }
 };
 
@@ -43,6 +48,7 @@ SerializableParameters from(const tremolo::Parameters& p) {
       .x = p.xValue.get(),
       .y = p.yValue.get(),
       .gain = p.gain.get(),
+      .levelCaptureWindowMs = p.levelCaptureWindowMs.get(),
   };
 }
 }  // namespace
@@ -98,6 +104,10 @@ juce::Result JsonSerializer::deserialize(juce::InputStream& input,
     parameters.xValue = parsedParameters->x;
     parameters.yValue = parsedParameters->y;
     parameters.gain = parsedParameters->gain;
+  }
+
+  if (version >= 3) {
+    parameters.levelCaptureWindowMs = parsedParameters->levelCaptureWindowMs;
   }
 
   return juce::Result::ok();
