@@ -9,14 +9,20 @@ TEST(JsonSerializer, SerializeToString) {
   parameters.rate = 10.f;
   parameters.bypassed = true;
   parameters.waveform = 1;
+  parameters.xValue = 0.25f;
+  parameters.yValue = 0.75f;
+  parameters.gain = 2.0f;
 
   const juce::String expectedOutput =
       u8R"({
-  "__version__": 1,
+  "__version__": 2,
   "pluginName": "Tremolo",
   "modulationRateHz": 10.0,
   "bypassed": true,
-  "modulationWaveform": "Triangle"
+  "modulationWaveform": "Triangle",
+  "xyX": 0.25,
+  "xyY": 0.75,
+  "gain": 2.0
 })";
   juce::MemoryBlock block;
   juce::MemoryOutputStream outputStream{block, false};
@@ -32,11 +38,14 @@ TEST(JsonSerializer, SerializeToString) {
 TEST(JsonSerializer, DeserializeFromString) {
   const juce::String savedParameters =
       u8R"({
-  "__version__": 1,
+  "__version__": 2,
   "pluginName": "Tremolo",
   "modulationRateHz": 10.0,
   "bypassed": true,
-  "modulationWaveform": "Triangle"
+  "modulationWaveform": "Triangle",
+  "xyX": 0.25,
+  "xyY": 0.75,
+  "gain": 2.0
 })";
 
   juce::MemoryInputStream inputStream{
@@ -53,6 +62,9 @@ TEST(JsonSerializer, DeserializeFromString) {
   EXPECT_TRUE(parameters.bypassed);
   EXPECT_EQ(juce::String{"Triangle"},
             parameters.waveform.getCurrentChoiceName());
+  EXPECT_FLOAT_EQ(parameters.xValue.get(), 0.25f);
+  EXPECT_FLOAT_EQ(parameters.yValue.get(), 0.75f);
+  EXPECT_FLOAT_EQ(parameters.gain.get(), 2.0f);
 }
 
 TEST(JsonSerializer, DontUpdateParametersWhenWaveformNameIsInvalid) {

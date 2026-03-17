@@ -157,6 +157,18 @@ void XYController::mouseDrag(const juce::MouseEvent& event) {
     updatePosition(position);
 }
 
+// 外部同步（例如从宿主恢复参数后刷新UI）
+void XYController::setValues(float newXValue, float newYValue, bool sendCallback) {
+    xValue = juce::jlimit(0.0f, 1.0f, newXValue);
+    yValue = juce::jlimit(0.0f, 1.0f, newYValue);
+
+    repaint();
+
+    if (sendCallback && valueChangeCallback) {
+        valueChangeCallback(xValue, yValue);
+    }
+}
+
 // 更新位置并触发回调
 void XYController::updatePosition(juce::Point<float> position) {
     // 获取组件大小
@@ -379,7 +391,6 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   gainSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   gainSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
   gainSlider.setRange(0.1, 10.0, 0.1); // 增益范围从0.1到10.0，步进0.1
-  gainSlider.setValue(1.0); // 默认增益为1.0
   addAndMakeVisible(gainSlider);
 
   // // 设置指示灯标签
@@ -402,6 +413,11 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     p.getParameterRefs().xValue.setValueNotifyingHost(x);
     p.getParameterRefs().yValue.setValueNotifyingHost(y);
   });
+
+  // 从处理器参数同步一次XY控制器初始位置（支持宿主恢复状态）
+  xyController.setValues(p.getParameterRefs().xValue.get(),
+                         p.getParameterRefs().yValue.get(),
+                         false);
   
   // 将XY控制器添加到界面
   addAndMakeVisible(xyController);
@@ -432,6 +448,14 @@ void PluginEditor::timerCallback() {
     // 获取音频处理器引用，用于访问Tremolo效果器的状态信息
     // dynamic_cast：安全类型转换，确保processor确实是PluginProcessor类型
     auto& audioProcessor = dynamic_cast<PluginProcessor&>(processor);
+
+    // 同步XY控制器UI到当前参数值（避免宿主自动化/恢复后UI停留在默认值）
+    const auto xParam = audioProcessor.getParameterRefs().xValue.get();
+    const auto yParam = audioProcessor.getParameterRefs().yValue.get();
+    if (!juce::approximatelyEqual(xParam, xyController.getXValue()) ||
+        !juce::approximatelyEqual(yParam, xyController.getYValue())) {
+        xyController.setValues(xParam, yParam, false);
+    }
     
     // 更新指示灯状态：传入时间增量（1/60秒）
     // 指示灯根据音频信号的峰值决定是否闪烁

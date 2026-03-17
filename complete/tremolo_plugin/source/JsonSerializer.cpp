@@ -3,14 +3,18 @@ struct SerializableParameters {
   float rate;
   bool bypassed;
   juce::String waveform;
+  float x{0.5f};
+  float y{0.5f};
+  float gain{1.0f};
 
-  static constexpr auto marshallingVersion = 1;
+  static constexpr auto marshallingVersion = 2;
 
   template <typename Archive, typename T>
   static void serialise(Archive& archive, T& p) {
     using namespace juce;
 
-    if (archive.getVersion() != 1) {
+    const auto version = archive.getVersion();
+    if (version != 1 && version != 2) {
       return;
     }
 
@@ -24,6 +28,10 @@ struct SerializableParameters {
 
     archive(named("modulationRateHz", p.rate), named("bypassed", p.bypassed),
             named("modulationWaveform", p.waveform));
+
+    if (version >= 2) {
+      archive(named("xyX", p.x), named("xyY", p.y), named("gain", p.gain));
+    }
   }
 };
 
@@ -32,6 +40,9 @@ SerializableParameters from(const tremolo::Parameters& p) {
       .rate = p.rate.get(),
       .bypassed = p.bypassed.get(),
       .waveform = p.waveform.getCurrentChoiceName(),
+      .x = p.xValue.get(),
+      .y = p.yValue.get(),
+      .gain = p.gain.get(),
   };
 }
 }  // namespace
@@ -81,6 +92,13 @@ juce::Result JsonSerializer::deserialize(juce::InputStream& input,
   parameters.waveform = modulationWaveformIndex;
   parameters.rate = parsedParameters->rate;
   parameters.bypassed = parsedParameters->bypassed;
+
+  const auto version = static_cast<int>(parsedResult.getProperty("__version__", 0));
+  if (version >= 2) {
+    parameters.xValue = parsedParameters->x;
+    parameters.yValue = parsedParameters->y;
+    parameters.gain = parsedParameters->gain;
+  }
 
   return juce::Result::ok();
 }

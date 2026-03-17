@@ -12,6 +12,9 @@ public:
     // 鼠标事件处理
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
+
+    // 外部同步（例如从宿主恢复参数后刷新UI）
+    void setValues(float newXValue, float newYValue, bool sendCallback = false);
     
     // 获取当前X和Y值（范围0.0到1.0）
     float getXValue() const { return xValue; }
