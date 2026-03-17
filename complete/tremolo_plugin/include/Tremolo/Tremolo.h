@@ -51,8 +51,9 @@ public:
   }
 
   // 将外部分析得到的峰值送入检测器，用于指示灯触发。
-  void updateDetectionPeak(float detectedPeakLinear) noexcept {
+  void updateDetectionPeak(float detectedPeakLinear, float deltaTimeSeconds) noexcept {
     peakLevel = juce::jmax(0.0f, detectedPeakLinear);
+    levelDetectionElapsedSeconds += juce::jmax(0.0f, deltaTimeSeconds);
     updateLevelDetection();
   }
 
@@ -97,7 +98,7 @@ public:
 
   // 获取指示灯亮起持续时间
   float getIndicatorDuration() const noexcept {
-    return flashDuration;
+    return flashDurationSeconds;
   }
 
   // 更新指示灯状态（需要在音频线程外调用）
@@ -122,8 +123,38 @@ private:
     
     // 如果从低于阈值变为高于阈值，触发闪烁
     if (isAboveThreshold && !wasAboveThreshold) {
+      // 记录本次触发与上次触发的间隔（从第二次触发开始才有意义）
+      if (hasLastTrigger) {
+        const auto intervalSec = levelDetectionElapsedSeconds;
+        // 仅接受合理区间，避免暂停/恢复或采样率异常导致的巨大间隔污染
+        if (intervalSec > 0.0f) {
+          recentTriggerIntervalsSec[recentTriggerIntervalWriteIndex] = intervalSec;
+          recentTriggerIntervalWriteIndex = (recentTriggerIntervalWriteIndex + 1) % recentTriggerIntervalsSec.size();
+          recentTriggerIntervalCount = juce::jmin<int>(recentTriggerIntervalCount + 1,
+                                                      static_cast<int>(recentTriggerIntervalsSec.size()));
+        }
+      }
+
+      // 本次触发后重置计时基准
+      levelDetectionElapsedSeconds = 0.0f;
+      hasLastTrigger = true;
+
+      // 计算动态闪烁持续时间：首次触发用默认值；之后用最近三次间隔平均值*0.8
+      flashDurationSeconds = tremolo::defaults::indicatorFlashDurationSecDefault;
+      if (recentTriggerIntervalCount >= 1) {
+        float sum = 0.0f;
+        for (int i = 0; i < recentTriggerIntervalCount; ++i) {
+          sum += recentTriggerIntervalsSec[static_cast<size_t>(i)];
+        }
+        const auto avgIntervalSec = sum / static_cast<float>(recentTriggerIntervalCount);
+        flashDurationSeconds = avgIntervalSec * tremolo::defaults::indicatorFlashDurationScale;
+      }
+      flashDurationSeconds = juce::jlimit(tremolo::defaults::indicatorFlashDurationSecMin,
+                                          tremolo::defaults::indicatorFlashDurationSecMax,
+                                          flashDurationSeconds);
+
       isFlashing = true;
-      flashTimer = flashDuration;
+      flashTimer = flashDurationSeconds;
     }
     
     // 更新状态
@@ -145,8 +176,15 @@ private:
   bool isFlashing = false;           // 指示灯闪烁状态
   float flashTimer = 0.0f;           // 闪烁计时器
   float thresholdDB = tremolo::defaults::triggerThresholdDb;         // 触发阈值（dB）
-  const float flashDuration = 0.2f;  // 闪烁持续时间（0.5秒）
+  float flashDurationSeconds = tremolo::defaults::indicatorFlashDurationSecDefault;  // 动态闪烁时长（秒）
   bool wasAboveThreshold = false;    // 上次是否超过阈值
+
+  // 动态闪烁时长计算：记录最近N次“阈值上升沿”的间隔
+  float levelDetectionElapsedSeconds = 0.0f;
+  bool hasLastTrigger = false;
+  std::array<float, 3> recentTriggerIntervalsSec {0.0f, 0.0f, 0.0f};
+  size_t recentTriggerIntervalWriteIndex = 0;
+  int recentTriggerIntervalCount = 0;
 };
 
 }  // namespace tremolo

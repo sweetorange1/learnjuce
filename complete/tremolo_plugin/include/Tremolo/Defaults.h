@@ -28,4 +28,12 @@ inline constexpr float inputLowpassHz = 20000.0f;
 // 电平检测阈值默认值（dB）
 inline constexpr float triggerThresholdDb = -15.0f;
 
+// 指示灯闪烁时长（秒）：首次默认值与动态时长限制
+inline constexpr float indicatorFlashDurationSecDefault = 0.4f;
+inline constexpr float indicatorFlashDurationSecMin = 0.2f;
+inline constexpr float indicatorFlashDurationSecMax = 1.0f;
+
+// 动态时长缩放：最近若干次触发间隔平均值 * scale
+inline constexpr float indicatorFlashDurationScale = 0.8f;
+
 }  // namespace tremolo::defaults

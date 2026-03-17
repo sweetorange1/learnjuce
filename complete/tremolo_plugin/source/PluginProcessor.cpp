@@ -159,7 +159,8 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
   const auto windowedPeak = latestWindowedInputPeak.load(std::memory_order_relaxed);
   latestInputLevel.store(windowedPeak, std::memory_order_relaxed);
   tremolo.setThresholdDb(triggerThresholdDb.load(std::memory_order_relaxed));
-  tremolo.updateDetectionPeak(windowedPeak);
+  const auto blockDeltaSeconds = static_cast<float>(buffer.getNumSamples() / juce::jmax(1.0, getSampleRateThreadSafe()));
+  tremolo.updateDetectionPeak(windowedPeak, blockDeltaSeconds);
 
   // 如果我们有比输入更多的输出通道，此代码会清除任何不包含输入数据的输出通道
   // （因为这些通道不保证为空 - 它们可能包含垃圾数据）
