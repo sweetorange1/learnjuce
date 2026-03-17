@@ -411,9 +411,9 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   // animationDuration：动画总持续时间（秒），根据指示灯亮起时间动态计算
   animationDuration = 0.0f;
   // startYPosition：动画起始Y轴位置（像素），从初始位置开始运动
-  startYPosition = 0.0f;
-  // targetYPosition：动画目标Y轴位置（像素），向上移动80像素
-  targetYPosition = 0.0f;
+  startYPosition = tremolo::defaults::jjAnimationStartYOffsetPx;
+  // targetYPosition：动画目标Y轴位置（像素），向上移动到“最高点偏移”
+  targetYPosition = tremolo::defaults::jjAnimationPeakYOffsetPx;
 
   // 设置Logo图片：从内存中加载Logo图片资源
   // logo.setImage(
@@ -562,12 +562,13 @@ void PluginEditor::timerCallback() {
       auto bounds = getLocalBounds();
       auto baseBounds = bounds.withSizeKeepingCentre(51, 325).translated(0, 200);
       
-      // 设置运动参数：从初始位置（0）向上移动到80像素位置
-      startYPosition = 0.0f;
-      targetYPosition = 80.0f; // 向上移动80像素
+      // 设置运动参数：从“起始偏移”向上移动到“最高点偏移”
+      startYPosition = tremolo::defaults::jjAnimationStartYOffsetPx;
+      targetYPosition = tremolo::defaults::jjAnimationPeakYOffsetPx;
       
-      // 强制设置图片到初始位置，确保动画起点准确
-      jjImage.setBounds(baseBounds);
+      // 强制设置图片到“起始偏移”位置，确保动画起点准确
+      jjImage.setBounds(baseBounds.translated(
+          0, -static_cast<int>(tremolo::defaults::jjAnimationStartYOffsetPx)));
   }
     
     // 更新动画状态：无论是否触发新动画，都需要更新当前动画
@@ -588,9 +589,12 @@ void PluginEditor::resized() {
   // 设置背景图片覆盖整个边界
   background.setBounds(bounds);
 
-  // 设置设置按钮的位置：左上角，大小为40x40像素，距离左上角10像素边距
-  auto settingsButtonBounds = juce::Rectangle<int>(10, 10, 40, 40);
-  settingsButton.setBounds(settingsButtonBounds);
+  // 设置设置按钮的位置：固定长宽，通过左上角偏移确定位置
+  settingsButton.setBounds(tremolo::defaults::settingsButtonLeftPx,
+                           tremolo::defaults::settingsButtonTopPx,
+                           tremolo::defaults::settingsButtonWidthPx,
+                           tremolo::defaults::settingsButtonHeightPx);
+
   
   // 设置设置面板的位置：覆盖整个界面，但留出边距
   auto settingsPanelBounds = bounds.reduced(50);
@@ -610,10 +614,11 @@ void PluginEditor::resized() {
   // gainArea.reduce(20, 0);
   // gainSlider.setBounds(gainArea);
 
-  // 计算XY控制器的边界：正方形，尺寸随界面大小自适应
-  const auto xySide = juce::jmax(200, juce::jmin(bounds.getWidth(), bounds.getHeight()) - 120);
-  auto xyBounds = bounds.withSizeKeepingCentre(xySide, xySide).translated(0, -20);
-  xyController.setBounds(xyBounds);
+  // XY 控制器：固定长宽，通过左上角偏移确定位置
+  xyController.setBounds(tremolo::defaults::xyControllerLeftPx,
+                         tremolo::defaults::xyControllerTopPx,
+                         tremolo::defaults::xyControllerWidthPx,
+                         tremolo::defaults::xyControllerHeightPx);
 
   // 计算旁路按钮的边界：右上角区域
   // auto bypassButtonBounds = bounds;
@@ -631,18 +636,11 @@ void PluginEditor::resized() {
   // bypassLabelBounds.removeFromLeft(396);
   // bypassLabel.setBounds(bypassLabelBounds);
 
-  // 计算指示灯区域的边界：顶部区域，在增益控制条下方
-  auto indicatorArea = bounds.removeFromTop(120);
-  indicatorArea.removeFromTop(80); // 移除增益控制区域
-  
-  // // 设置指示灯标签：左侧，宽度60像素
-  // auto indicatorLabelBounds = indicatorArea.removeFromLeft(60);
-  // indicatorLabel.setBounds(indicatorLabelBounds);
-  //
-  // 设置指示灯：右侧，圆形，直径40像素
-  auto indicatorLightBounds = indicatorArea.removeFromRight(60);
-  indicatorLightBounds = indicatorLightBounds.withSizeKeepingCentre(40, 40);
-  indicatorLight.setBounds(indicatorLightBounds);
+  // 设置指示灯：固定长宽，通过左上角偏移确定位置
+  indicatorLight.setBounds(tremolo::defaults::indicatorLightLeftPx,
+                           tremolo::defaults::indicatorLightTopPx,
+                           tremolo::defaults::indicatorLightWidthPx,
+                           tremolo::defaults::indicatorLightHeightPx);
 
   // 设置jj.png图片的位置和大小：居中靠下，大小为200x200像素
   // withSizeKeepingCentre：保持中心点不变，设置指定大小
@@ -663,7 +661,8 @@ void PluginEditor::resized() {
     } else {
       // 第一次指示灯已亮起：显示图片并确保在初始位置（Y偏移为0）
       jjImage.setVisible(true);
-      jjImage.setBounds(baseBounds);
+      jjImage.setBounds(baseBounds.translated(
+          0, -static_cast<int>(tremolo::defaults::jjAnimationStartYOffsetPx)));
     }
   }
 }
@@ -704,21 +703,22 @@ void PluginEditor::updateAnimation() {
             // 向上运动完成，切换到向下运动状态
             isMovingUp = false;
             animationProgress = 0.0f; // 重置进度
-            startYPosition = 100.0f; // 当前在最高点（向上移动80像素后的位置）
-            targetYPosition = 0.0f; // 目标位置：向下归位到初始位置
+            startYPosition = tremolo::defaults::jjAnimationPeakYOffsetPx; // 当前在最高点
+            targetYPosition = tremolo::defaults::jjAnimationStartYOffsetPx; // 目标位置：归位到起始位置
         } else {
             // 向下运动完成，停止整个动画过程
             isAnimating = false;
             animationProgress = 0.0f;
             
             // 重置运动参数，确保下次动画从正确的初始位置开始
-            startYPosition = 0.0f;
-            targetYPosition = 80.0f;
+            startYPosition = tremolo::defaults::jjAnimationStartYOffsetPx;
+            targetYPosition = tremolo::defaults::jjAnimationPeakYOffsetPx;
             
             // 强制设置图片回到初始位置，确保归位准确
             auto bounds = getLocalBounds();
             auto baseBounds = bounds.withSizeKeepingCentre(51, 325).translated(0, 200);
-            jjImage.setBounds(baseBounds);
+            jjImage.setBounds(baseBounds.translated(
+                0, -static_cast<int>(tremolo::defaults::jjAnimationStartYOffsetPx)));
             return; // 直接返回，不再执行后续位置计算
         }
     }

@@ -11,7 +11,25 @@ inline constexpr int waveformIndex = 0; // 0=Sine
 inline constexpr float xyX = 0.5f;
 inline constexpr float xyY = 0.3f;
 
-inline constexpr float gain = 4.0f;
+// XY 控制器布局（像素）：固定尺寸 + 左上角偏移
+inline constexpr int xyControllerWidthPx = 550;
+inline constexpr int xyControllerHeightPx = 550;
+inline constexpr int xyControllerLeftPx = 20;
+inline constexpr int xyControllerTopPx = 40;
+
+// 设置按钮布局（像素）：固定尺寸 + 左上角偏移
+inline constexpr int settingsButtonWidthPx = 27;
+inline constexpr int settingsButtonHeightPx = 27;
+inline constexpr int settingsButtonLeftPx = 10;
+inline constexpr int settingsButtonTopPx = 7;
+
+// 指示灯布局（像素）：固定尺寸 + 左上角偏移
+inline constexpr int indicatorLightWidthPx = 20;
+inline constexpr int indicatorLightHeightPx = 20;
+inline constexpr int indicatorLightLeftPx = 552;
+inline constexpr int indicatorLightTopPx = 10;
+
+inline constexpr float gain = 6.0f;
 
 // 电平捕捉窗口（毫秒）
 inline constexpr float levelCaptureWindowMs = 60.0f;
@@ -30,10 +48,15 @@ inline constexpr float triggerThresholdDb = -15.0f;
 
 // 指示灯闪烁时长（秒）：首次默认值与动态时长限制
 inline constexpr float indicatorFlashDurationSecDefault = 0.4f;
-inline constexpr float indicatorFlashDurationSecMin = 0.2f;
+inline constexpr float indicatorFlashDurationSecMin = 0.1f;
 inline constexpr float indicatorFlashDurationSecMax = 1.0f;
 
 // 动态时长缩放：最近若干次触发间隔平均值 * scale
 inline constexpr float indicatorFlashDurationScale = 0.8f;
+
+// jj.png 动画配置（像素）：起始位置与最高点位置（用于调整上下往复动画幅度）
+// 说明：这里使用“向上偏移量”，数值越大，图片越往上移动。
+inline constexpr float jjAnimationStartYOffsetPx = -10.0f;
+inline constexpr float jjAnimationPeakYOffsetPx = 200.0f;
 
 }  // namespace tremolo::defaults
