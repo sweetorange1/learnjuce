@@ -11,14 +11,8 @@ public:
 
   // 准备音频处理环境（添加滤波器初始化）
   void prepare(double sampleRate, int expectedMaxFramesPerBlock) {
-    // 初始化低通和高通滤波器
-    lowPassFilter.setCoefficients(juce::IIRCoefficients::makeLowPass(sampleRate, 24000.0f));
-    highPassFilter.setCoefficients(juce::IIRCoefficients::makeHighPass(sampleRate, 100.0f));
-    
-    // 重置滤波器状态
-    lowPassFilter.reset();
-    highPassFilter.reset();
-    
+    juce::ignoreUnused(sampleRate, expectedMaxFramesPerBlock);
+
     // 重置电平检测器
     peakLevel = 0.0f;
     isFlashing = false;
@@ -56,6 +50,12 @@ public:
     return thresholdDB;
   }
 
+  // 将外部分析得到的峰值送入检测器，用于指示灯触发。
+  void updateDetectionPeak(float detectedPeakLinear) noexcept {
+    peakLevel = juce::jmax(0.0f, detectedPeakLinear);
+    updateLevelDetection();
+  }
+
   // 主音频处理函数（添加信号拆分和电平检测）
   void process(juce::AudioBuffer<float>& buffer) noexcept {
     // Clipper阈值参数
@@ -69,22 +69,6 @@ public:
         // 获取输入样本
         const auto inputSample = buffer.getSample(channelIndex, frameIndex);
 
-        // === 信号拆分和电平检测 ===
-        // 复制输入信号用于检测（不传回宿主）
-        const auto detectionSample = inputSample;
-        
-        // 应用低通滤波器
-        // const auto lowPassed = lowPassFilter.processSingleSampleRaw(detectionSample);
-        
-        // 应用高通滤波器
-        // const auto filteredSample = highPassFilter.processSingleSampleRaw(lowPassed);
-        
-        // 计算峰值电平（绝对值）
-        const auto absSample = std::abs(detectionSample);
-        if (absSample > peakLevel) {
-          peakLevel = absSample;
-        }
-
         // === 主信号处理 ===
         // 应用增益提升（基于XY控制器位置）
         const auto boostedSample = inputSample * gainBoost;
@@ -97,14 +81,10 @@ public:
       }
     }
     
-    // 电平检测和指示灯控制
-    updateLevelDetection();
   }
 
   // 重置所有状态
   void reset() noexcept {
-    lowPassFilter.reset();
-    highPassFilter.reset();
     peakLevel = 0.0f;
     isFlashing = false;
     flashTimer = 0.0f;
@@ -161,8 +141,6 @@ private:
   float maxGain = 4.0f;       // 最大增益值（由控制条设置）
   
   // 信号检测相关参数
-  juce::IIRFilter lowPassFilter;     // 低通滤波器
-  juce::IIRFilter highPassFilter;    // 高通滤波器
   float peakLevel = 0.0f;            // 峰值电平
   bool isFlashing = false;           // 指示灯闪烁状态
   float flashTimer = 0.0f;           // 闪烁计时器

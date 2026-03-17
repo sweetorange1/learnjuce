@@ -7,8 +7,8 @@ VolumeMeter::VolumeMeter() {
     // 初始化历史数据
     levelHistory.fill(0.0f);
     
-    // 启动定时器用于实时更新显示（30fps）
-    startTimerHz(30);
+    // 启动定时器用于实时更新显示（60fps）
+    startTimerHz(60);
 }
 
 VolumeMeter::~VolumeMeter() {
@@ -18,7 +18,10 @@ VolumeMeter::~VolumeMeter() {
 
 void VolumeMeter::paint(juce::Graphics& g) {
     auto bounds = getLocalBounds().toFloat();
-    
+    auto plotBounds = bounds.reduced(8.0f);
+    auto meterArea = plotBounds;
+    meterArea.removeFromLeft(34.0f);
+
     // 绘制背景
     g.setColour(meterBackground);
     g.fillRoundedRectangle(bounds, 5.0f);
@@ -26,22 +29,35 @@ void VolumeMeter::paint(juce::Graphics& g) {
     // 绘制边框
     g.setColour(juce::Colours::white.withAlpha(0.3f));
     g.drawRoundedRectangle(bounds, 5.0f, 1.0f);
-    
+
+    for (const auto db : {0.0f, -12.0f, -24.0f, -36.0f, -48.0f, -60.0f}) {
+        const auto y = thresholdDbToY(db, meterArea);
+        g.setColour(juce::Colours::white.withAlpha(0.12f));
+        g.drawLine(meterArea.getX(), y, meterArea.getRight(), y, 1.0f);
+
+        g.setColour(juce::Colours::white.withAlpha(0.6f));
+        g.setFont(juce::Font(juce::FontOptions{}.withHeight(10.0f)));
+        g.drawText(juce::String(db, 0) + " dB",
+                   juce::Rectangle<float>(plotBounds.getX(), y - 8.0f, 30.0f, 16.0f),
+                   juce::Justification::centredRight, false);
+    }
+
     if (useWaveformDisplay) {
         // 滚动曲线模式：按时间从左到右显示历史电平。
         g.setColour(waveformColor);
         
         // 计算波形路径
         juce::Path waveformPath;
-        float width = bounds.getWidth();
-        float height = bounds.getHeight();
-        const float bottomY = bounds.getBottom();
+        const float width = meterArea.getWidth();
+        const float height = meterArea.getHeight();
+        const float bottomY = meterArea.getBottom();
+        const float startX = meterArea.getX();
 
         // 绘制波形
         for (int i = 0; i < HISTORY_SIZE; ++i) {
             int index = (historyIndex + i) % HISTORY_SIZE;
-            float x = (float)i / (HISTORY_SIZE - 1) * width;
-            float y = bottomY - levelHistory[index] * height;
+            float x = startX + (float)i / (HISTORY_SIZE - 1) * width;
+            float y = bottomY - (levelHistory[index] * height);
 
             if (i == 0) {
                 waveformPath.startNewSubPath(x, y);
@@ -54,15 +70,18 @@ void VolumeMeter::paint(juce::Graphics& g) {
         g.strokePath(waveformPath, juce::PathStrokeType(2.0f));
         
     } else {
-        // 电平条显示模式
-        float currentLevelValue = currentLevel.load();
-        float peakLevelValue = peakLevel.load();
-        
+        // 电平条显示模式（自下向上），与dB阈值横线语义保持一致。
+        const float currentLevelValue = currentLevel.load();
+        const float peakLevelValue = peakLevel.load();
+
         // 绘制当前电平条
         if (currentLevelValue > 0.0f) {
-            float levelWidth = bounds.getWidth() * currentLevelValue;
-            auto levelBounds = bounds.withWidth(levelWidth);
-            
+            const float levelHeight = meterArea.getHeight() * currentLevelValue;
+            auto levelBounds = juce::Rectangle<float>(meterArea.getX(),
+                                                      meterArea.getBottom() - levelHeight,
+                                                      meterArea.getWidth(),
+                                                      levelHeight);
+
             // 根据电平值设置颜色（绿色到黄色到红色）
             juce::Colour levelColor;
             if (currentLevelValue < 0.7f) {
@@ -79,46 +98,28 @@ void VolumeMeter::paint(juce::Graphics& g) {
         
         // 绘制峰值指示器
         if (peakLevelValue > 0.0f) {
-            float peakX = bounds.getWidth() * peakLevelValue;
+            const float peakY = meterArea.getBottom() - meterArea.getHeight() * peakLevelValue;
             g.setColour(peakIndicator);
-            g.drawLine(peakX, 0.0f, peakX, bounds.getHeight(), 2.0f);
+            g.drawLine(meterArea.getX(), peakY, meterArea.getRight(), peakY, 2.0f);
         }
     }
 
     const auto threshold = thresholdDb.load(std::memory_order_relaxed);
-    const auto thresholdY = thresholdDbToY(threshold, bounds);
+    const auto thresholdY = thresholdDbToY(threshold, meterArea);
     g.setColour(thresholdColor);
-    g.drawLine(bounds.getX(), thresholdY, bounds.getRight(), thresholdY, 1.5f);
+    g.drawLine(meterArea.getX(), thresholdY, meterArea.getRight(), thresholdY, 1.5f);
 
     const auto thresholdText = juce::String(threshold, 1) + " dB";
-    auto labelBounds = juce::Rectangle<float>(bounds.getRight() - 88.0f,
+    auto labelBounds = juce::Rectangle<float>(meterArea.getRight() - 88.0f,
                                               thresholdY - 10.0f,
                                               84.0f,
                                               18.0f);
-    labelBounds = labelBounds.constrainedWithin(bounds.reduced(2.0f));
+    labelBounds = labelBounds.constrainedWithin(meterArea.reduced(2.0f));
     g.setColour(juce::Colours::black.withAlpha(0.5f));
     g.fillRoundedRectangle(labelBounds, 3.0f);
     g.setColour(thresholdColor.brighter(0.3f));
-    g.setFont(juce::Font(11.0f, juce::Font::bold));
+    g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
     g.drawText(thresholdText, labelBounds, juce::Justification::centredRight, false);
-
-    // 绘制刻度线和标签
-    g.setColour(juce::Colours::white.withAlpha(0.5f));
-    g.setFont(juce::Font(10.0f));
-    
-    // 绘制刻度线
-    float width = bounds.getWidth();
-    for (int i = 0; i <= 10; ++i) {
-        float xPos = width * (i / 10.0f);
-        g.drawLine(xPos, 0.0f, xPos, 5.0f, 1.0f);
-        
-        // 绘制刻度标签
-        if (i % 2 == 0) {
-            juce::String label = juce::String(i * 10) + "%";
-            g.drawText(label, juce::Rectangle<float>(xPos - 20.0f, bounds.getHeight() - 15.0f, 40.0f, 12.0f), 
-                      juce::Justification::centred, true);
-        }
-    }
 }
 
 void VolumeMeter::resized() {
@@ -135,7 +136,7 @@ void VolumeMeter::mouseDrag(const juce::MouseEvent& event) {
 
 void VolumeMeter::timerCallback() {
     // 更新峰值保持计时器
-    float deltaTime = 1.0f / 30.0f; // 30fps
+    const float deltaTime = 1.0f / 60.0f; // 60fps
     float currentPeakHoldTimer = peakHoldTimer.load();
     
     if (currentPeakHoldTimer > 0.0f) {
@@ -209,7 +210,11 @@ float VolumeMeter::yToThresholdDb(float y, juce::Rectangle<float> bounds) const 
 }
 
 void VolumeMeter::updateThresholdFromY(float y) {
-    const auto db = yToThresholdDb(y, getLocalBounds().toFloat());
+    auto plotBounds = getLocalBounds().toFloat().reduced(8.0f);
+    auto meterArea = plotBounds;
+    meterArea.removeFromLeft(34.0f);
+
+    const auto db = yToThresholdDb(y, meterArea);
     setThresholdDb(db);
 
     if (thresholdChangedCallback) {

@@ -86,6 +86,14 @@ void PluginProcessor::prepareToPlay(double sampleRate,
        .numChannels = static_cast<uint32_t>(juce::jmax(
            getTotalNumInputChannels(), getTotalNumOutputChannels()))});
 
+  const auto inputChannelCount = juce::jmax(1, getTotalNumInputChannels());
+  // 修复：避免使用assign方法，改用resize和循环初始化
+  detectionHighpassFilters.resize(static_cast<size_t>(inputChannelCount));
+  detectionLowpassFilters.resize(static_cast<size_t>(inputChannelCount));
+  activeInputHighpassHz = inputHighpassHz.load(std::memory_order_relaxed);
+  activeInputLowpassHz = inputLowpassHz.load(std::memory_order_relaxed);
+  updateDetectionFilterCoefficients(activeInputHighpassHz, activeInputLowpassHz);
+
   latestInputLevel.store(0.0f, std::memory_order_relaxed);
   triggerThresholdDb.store(-12.0f, std::memory_order_relaxed);
 }
@@ -95,6 +103,8 @@ void PluginProcessor::releaseResources() {
   // 当播放停止时，您可以使用此机会释放任何空闲内存等
   tremolo.reset();
   bypassTransitionSmoother.reset();
+  detectionHighpassFilters.clear();
+  detectionLowpassFilters.clear();
   latestInputLevel.store(0.0f, std::memory_order_relaxed);
 }
 
@@ -128,12 +138,17 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
   const auto totalNumInputChannels = getTotalNumInputChannels();
   const auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-  float inputPeak = 0.0f;
-  const auto numSamples = buffer.getNumSamples();
-  for (int channel = 0; channel < totalNumInputChannels; ++channel) {
-    inputPeak = juce::jmax(inputPeak, buffer.getMagnitude(channel, 0, numSamples));
+  const auto desiredHighpassHz = inputHighpassHz.load(std::memory_order_relaxed);
+  const auto desiredLowpassHz = inputLowpassHz.load(std::memory_order_relaxed);
+  if (desiredHighpassHz != activeInputHighpassHz ||
+      desiredLowpassHz != activeInputLowpassHz) {
+    updateDetectionFilterCoefficients(desiredHighpassHz, desiredLowpassHz);
   }
+
+  const auto inputPeak = analyseFilteredInputPeak(buffer);
   latestInputLevel.store(inputPeak, std::memory_order_relaxed);
+  tremolo.setThresholdDb(triggerThresholdDb.load(std::memory_order_relaxed));
+  tremolo.updateDetectionPeak(inputPeak);
 
   // 如果我们有比输入更多的输出通道，此代码会清除任何不包含输入数据的输出通道
   // （因为这些通道不保证为空 - 它们可能包含垃圾数据）
@@ -153,10 +168,6 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
   
   // 更新XY控制器参数（根据XY位置计算实际增益）
   tremolo.setXYValues(parameters.xValue.get(), parameters.yValue.get());
-
-  // 将UI阈值安全同步到音频线程。
-  tremolo.setThresholdDb(
-      triggerThresholdDb.load(std::memory_order_relaxed));
 
   // 设置旁路状态到过渡平滑器
   bypassTransitionSmoother.setBypass(parameters.bypassed);
@@ -243,6 +254,83 @@ void PluginProcessor::setTriggerThresholdDb(float thresholdDb) noexcept {
 
 float PluginProcessor::getTriggerThresholdDb() const noexcept {
   return triggerThresholdDb.load(std::memory_order_relaxed);
+}
+
+void PluginProcessor::setInputFilterFrequencies(float highpassHz,
+                                                float lowpassHz) noexcept {
+  const auto sampleRate = juce::jmax(1.0, getSampleRateThreadSafe());
+  const auto maxCutoffHz = static_cast<float>(
+      juce::jlimit(40.0, 20000.0, sampleRate * 0.5 - 20.0));
+
+  auto clampedHighpassHz = juce::jlimit(20.0f, maxCutoffHz - 20.0f, highpassHz);
+  auto clampedLowpassHz = juce::jlimit(40.0f, maxCutoffHz, lowpassHz);
+
+  if (clampedHighpassHz >= clampedLowpassHz) {
+    clampedHighpassHz = juce::jmin(clampedHighpassHz, clampedLowpassHz - 20.0f);
+    clampedLowpassHz = juce::jmax(clampedLowpassHz, clampedHighpassHz + 20.0f);
+  }
+
+  inputHighpassHz.store(clampedHighpassHz, std::memory_order_relaxed);
+  inputLowpassHz.store(clampedLowpassHz, std::memory_order_relaxed);
+}
+
+float PluginProcessor::getInputHighpassHz() const noexcept {
+  return inputHighpassHz.load(std::memory_order_relaxed);
+}
+
+float PluginProcessor::getInputLowpassHz() const noexcept {
+  return inputLowpassHz.load(std::memory_order_relaxed);
+}
+
+void PluginProcessor::updateDetectionFilterCoefficients(float highpassHz,
+                                                        float lowpassHz) noexcept {
+  const auto sampleRate = juce::jmax(1.0, getSampleRateThreadSafe());
+  const auto maxCutoffHz = static_cast<float>(
+      juce::jlimit(40.0, 20000.0, sampleRate * 0.5 - 20.0));
+  activeInputHighpassHz = juce::jlimit(20.0f, maxCutoffHz - 20.0f, highpassHz);
+  activeInputLowpassHz = juce::jlimit(activeInputHighpassHz + 20.0f,
+                                      maxCutoffHz, lowpassHz);
+
+  const auto highpassCoefficients =
+      juce::IIRCoefficients::makeHighPass(sampleRate, activeInputHighpassHz);
+  const auto lowpassCoefficients =
+      juce::IIRCoefficients::makeLowPass(sampleRate, activeInputLowpassHz);
+
+  for (auto& filter : detectionHighpassFilters) {
+    filter.setCoefficients(highpassCoefficients);
+    filter.reset();
+  }
+
+  for (auto& filter : detectionLowpassFilters) {
+    filter.setCoefficients(lowpassCoefficients);
+    filter.reset();
+  }
+}
+
+float PluginProcessor::analyseFilteredInputPeak(
+    const juce::AudioBuffer<float>& buffer) noexcept {
+  const auto inputChannelCount = juce::jmin(
+      buffer.getNumChannels(), static_cast<int>(detectionHighpassFilters.size()));
+
+  if (inputChannelCount <= 0 || buffer.getNumSamples() <= 0) {
+    return 0.0f;
+  }
+
+  float detectedPeak = 0.0f;
+
+  for (int channel = 0; channel < inputChannelCount; ++channel) {
+    const auto* readPointer = buffer.getReadPointer(channel);
+    auto& highpassFilter = detectionHighpassFilters[static_cast<size_t>(channel)];
+    auto& lowpassFilter = detectionLowpassFilters[static_cast<size_t>(channel)];
+
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+      const auto highpassed = highpassFilter.processSingleSampleRaw(readPointer[sample]);
+      const auto bandLimited = lowpassFilter.processSingleSampleRaw(highpassed);
+      detectedPeak = juce::jmax(detectedPeak, std::abs(bandLimited));
+    }
+  }
+
+  return detectedPeak;
 }
 
 // 命名空间结束

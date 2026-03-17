@@ -116,7 +116,7 @@ void SpectrumAnalyser::paint(juce::Graphics& g)
     
     // 绘制频率标签
     g.setColour(juce::Colours::white.withAlpha(0.7f));
-    g.setFont(juce::Font(10.0f));
+    g.setFont(juce::Font(juce::FontOptions{}.withHeight(10.0f)));
     
     for (auto freq : frequencies) {
         float x = frequencyToX(freq, bounds);
@@ -139,7 +139,7 @@ void SpectrumAnalyser::paint(juce::Graphics& g)
     
     // 绘制标题
     g.setColour(juce::Colours::white);
-    g.setFont(juce::Font(12.0f, juce::Font::bold));
+    g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
     g.drawText("Input Spectrum", bounds.toNearestInt(), juce::Justification::centredTop);
 }
 
@@ -201,14 +201,14 @@ void SpectrumAnalyser::createSpectrumPath()
     bool started = false;
     
     for (int i = 1; i < numBins; ++i) {
-        float frequency = (sampleRate * i) / fftSize;
+        float frequency = static_cast<float>((sampleRate * i) / fftSize);
         
         // 只显示指定频率范围内的数据
         if (frequency < minFrequency || frequency > maxFrequency) continue;
         
         float x = frequencyToX(frequency, bounds);
         float magnitude = fftData[i];
-        float decibels = juce::Decibels::gainToDecibels(magnitude, minDecibels);
+        float decibels = juce::Decibels::gainToDecibels(magnitude, static_cast<float>(minDecibels));
         float y = decibelsToY(decibels, bounds);
         
         if (!started) {

@@ -6,7 +6,7 @@ SettingsPanel::SettingsPanel() {
     // 设置标题标签
     titleLabel.setText("Settings", juce::dontSendNotification);
     titleLabel.setJustificationType(juce::Justification::centred);
-    titleLabel.setFont(juce::Font(18.0f, juce::Font::bold));
+    titleLabel.setFont(juce::Font(juce::FontOptions(18.0f, juce::Font::bold)));
     titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(titleLabel);
 
@@ -24,6 +24,34 @@ SettingsPanel::SettingsPanel() {
 
     volumeMeter.setDisplayMode(true);
     addAndMakeVisible(volumeMeter);
+
+    inputFilterLabel.setText("Input Filter", juce::dontSendNotification);
+    inputFilterLabel.setJustificationType(juce::Justification::centredLeft);
+    inputFilterLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible(inputFilterLabel);
+
+    inputFilterSlider.setSliderStyle(juce::Slider::TwoValueHorizontal);
+    inputFilterSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    inputFilterSlider.setRange(20.0, 20000.0, 1.0);
+    inputFilterSlider.setSkewFactorFromMidPoint(1000.0);
+    inputFilterSlider.setMinAndMaxValues(20.0, 20000.0, juce::dontSendNotification);
+    inputFilterSlider.onValueChange = [this]() {
+        const auto highpassHz = static_cast<float>(inputFilterSlider.getMinValue());
+        const auto lowpassHz = static_cast<float>(inputFilterSlider.getMaxValue());
+        updateInputFilterText(highpassHz, lowpassHz);
+
+        if (inputFilterChangedCallback) {
+            inputFilterChangedCallback(highpassHz, lowpassHz);
+        }
+    };
+    addAndMakeVisible(inputFilterSlider);
+
+    inputFilterValueLabel.setJustificationType(juce::Justification::centredLeft);
+    inputFilterValueLabel.setColour(juce::Label::textColourId,
+                                    juce::Colours::white.withAlpha(0.75f));
+    addAndMakeVisible(inputFilterValueLabel);
+
+    updateInputFilterText(20.0f, 20000.0f);
 }
 
 void SettingsPanel::paint(juce::Graphics& g) {
@@ -48,7 +76,16 @@ void SettingsPanel::resized() {
     waveformToggle.setBounds(controls.removeFromLeft(170));
 
     content.removeFromTop(10);
-    volumeMeter.setBounds(content.removeFromTop(120));
+    volumeMeter.setBounds(content.removeFromTop(160));
+
+    content.removeFromTop(12);
+    inputFilterLabel.setBounds(content.removeFromTop(24));
+
+    content.removeFromTop(6);
+    inputFilterSlider.setBounds(content.removeFromTop(28));
+
+    content.removeFromTop(4);
+    inputFilterValueLabel.setBounds(content.removeFromTop(20));
 }
 
 void SettingsPanel::setVisible(bool shouldBeVisible) {
@@ -75,6 +112,29 @@ void SettingsPanel::setThresholdDb(float thresholdDb) {
 
 void SettingsPanel::setThresholdChangedCallback(std::function<void(float)> callback) {
     volumeMeter.setThresholdChangedCallback(callback);
+}
+
+void SettingsPanel::setInputFilterFrequencies(float highpassHz, float lowpassHz) {
+    inputFilterSlider.setMinAndMaxValues(highpassHz, lowpassHz,
+                                         juce::dontSendNotification);
+    updateInputFilterText(highpassHz, lowpassHz);
+}
+
+void SettingsPanel::setInputFilterChangedCallback(
+    std::function<void(float, float)> callback) {
+    inputFilterChangedCallback = callback;
+}
+
+void SettingsPanel::updateInputFilterText(float highpassHz, float lowpassHz) {
+    auto formatFrequency = [](float frequencyHz) {
+        return frequencyHz >= 1000.0f
+                   ? juce::String(frequencyHz / 1000.0f, 1) + " kHz"
+                   : juce::String(frequencyHz, 0) + " Hz";
+    };
+
+    inputFilterValueLabel.setText("HP " + formatFrequency(highpassHz) +
+                                      "   LP " + formatFrequency(lowpassHz),
+                                  juce::dontSendNotification);
 }
 
 // XYController类的实现
@@ -176,7 +236,7 @@ void XYController::paint(juce::Graphics& g) {
                             juce::String("\nGain: ") + juce::String(gainBoost, 2) + "x";
     
     // 设置字体和颜色
-    g.setFont(juce::Font(14.0f));
+    g.setFont(juce::Font(juce::FontOptions{}.withHeight(14.0f)));
     g.setColour(juce::Colours::white);
     
     // 计算文本位置（右下角，留出边距）
@@ -254,6 +314,12 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   settingsPanel.setThresholdChangedCallback([&p](float thresholdDb) {
       p.setTriggerThresholdDb(thresholdDb);
   });
+  settingsPanel.setInputFilterFrequencies(p.getInputHighpassHz(),
+                                          p.getInputLowpassHz());
+  settingsPanel.setInputFilterChangedCallback(
+      [&p](float highpassHz, float lowpassHz) {
+          p.setInputFilterFrequencies(highpassHz, lowpassHz);
+      });
   addChildComponent(settingsPanel); // 作为子组件添加，但不立即显示
 
   // 初始化动画状态：设置动画系统的初始值
@@ -304,7 +370,7 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   // 设置增益标签
   gainLabel.setJustificationType(juce::Justification::centred);
   gainLabel.setMinimumHorizontalScale(1.f);
-  gainLabel.setFont(lookAndFeel.getSideLabelsFont());
+  gainLabel.setFont(juce::Font(juce::FontOptions{}.withHeight(14.0f)));
   gainLabel.setColour(juce::Label::textColourId, sideFontColor);
   gainLabel.setText("MAX GAIN", juce::dontSendNotification); // 明确表示是最大增益
   addAndMakeVisible(gainLabel);
@@ -367,16 +433,18 @@ void PluginEditor::timerCallback() {
     // dynamic_cast：安全类型转换，确保processor确实是PluginProcessor类型
     auto& audioProcessor = dynamic_cast<PluginProcessor&>(processor);
     
-    // 更新指示灯状态：传入时间增量（1/30秒）
+    // 更新指示灯状态：传入时间增量（1/60秒）
     // 指示灯根据音频信号的峰值决定是否闪烁
-    audioProcessor.getTremolo().updateIndicatorState(1.0f / 30.0f);
-    
+    audioProcessor.getTremolo().updateIndicatorState(1.0f / 60.0f);
+
     // 获取指示灯当前是否应该闪烁的状态
     bool shouldFlash = audioProcessor.getTremolo().shouldFlashIndicator();
 
     // 将输入信号实时推送给设置面板中的滚动电平窗。
     settingsPanel.updateVolumeLevel(audioProcessor.getLatestInputLevel());
     settingsPanel.setThresholdDb(audioProcessor.getTriggerThresholdDb());
+    settingsPanel.setInputFilterFrequencies(audioProcessor.getInputHighpassHz(),
+                                            audioProcessor.getInputLowpassHz());
 
     // 设置指示灯组件的闪烁状态
     indicatorLight.setFlashing(shouldFlash);

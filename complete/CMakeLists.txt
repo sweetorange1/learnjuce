@@ -3,19 +3,22 @@
 # 3.25 is required for the MSVC_DEBUG_INFORMATION_FORMAT feature to work.
 # To verify your version run
 # $ cmake --version
-cmake_minimum_required(VERSION 3.31.6 FATAL_ERROR)
+cmake_minimum_required(VERSION 4.3.0 FATAL_ERROR)
 
 # Enable setting CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
 set(CMAKE_POLICY_DEFAULT_CMP0141        NEW      CACHE STRING "" FORCE)
 
-# Sets the minimum deployment target
+# Sets the minimum deployment target*
 # macOS 10.11 is the minimum required by JUCE
 set(CMAKE_OSX_DEPLOYMENT_TARGET "10.11" CACHE STRING "" FORCE)
 # Builds a binary that works on Apple Silicon (arm64) and Intel-based Macs
 set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64" CACHE STRING "" FORCE)
 
 # Sets a few variables, like PROJECT_NAME.
-project(JucePluginDevelopmentCourseTremoloPlugin)
+project(JucePluginDevelopmentCourseTremoloPlugin VERSION 8.0.12 LANGUAGES CXX)
+
+# 设置JUCE为静态链接模式
+set(JUCE_SHARED_CODE OFF CACHE BOOL "Use static linking for JUCE" FORCE)
 
 # Set the C++ standard only if this project is standalone;
 # otherwise, let clients decide.
@@ -33,15 +36,14 @@ if(PROJECT_IS_TOP_LEVEL)
   # Add UTF-8 encoding support for Chinese comments
   if(MSVC)
     # For MSVC compiler
-    add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
-    add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    add_compile_options("/utf-8")
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
   else()
     # For GCC/Clang compilers
-    add_compile_options("$<$<OR:$<C_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:GNU>>:-finput-charset=UTF-8>")
-    add_compile_options("$<$<OR:$<C_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:GNU>>:-fexec-charset=UTF-8>")
-    add_compile_options("$<$<OR:$<C_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:Clang>>:-finput-charset=UTF-8>")
-    add_compile_options("$<$<OR:$<C_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:Clang>>:-fexec-charset=UTF-8>")
+    add_compile_options(
+      "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-finput-charset=UTF-8>"
+      "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-fexec-charset=UTF-8>"
+    )
   endif()
 endif()
 
@@ -120,6 +122,8 @@ juce_add_binary_data(tremolo_plugin_assets
   SOURCES
     assets/Background.png
     assets/Logo.png
+    assets/setting.png
+    assets/jj.png
     assets/Inter-Bold.ttf
     assets/Inter-Medium.ttf
 )
@@ -142,13 +146,6 @@ juce_add_module(tremolo_plugin ALIAS_NAMESPACE tremolo)
 
 # Enables strict C++ warnings.
 target_compile_options(tremolo_plugin INTERFACE "${PROJECT_WARNINGS_CXX}")
-
-# Add UTF-8 encoding support for Chinese comments
-if(MSVC)
-  target_compile_options(tremolo_plugin INTERFACE "/utf-8")
-else()
-  target_compile_options(tremolo_plugin INTERFACE "-finput-charset=UTF-8" "-fexec-charset=UTF-8")
-endif()
 
 # Add UTF-8 encoding support for Chinese comments
 if(MSVC)
@@ -200,14 +197,13 @@ if(BUILD_TESTS)
   # Add UTF-8 encoding support for Chinese comments
   if(MSVC)
     # For MSVC compiler
-    add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
-    add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    add_compile_options("/utf-8")
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
   else()
     # For GCC/Clang compilers
-    add_compile_options("$<$<OR:$<C_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:GNU>>:-finput-charset=UTF-8>")
-    add_compile_options("$<$<OR:$<C_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:GNU>>:-fexec-charset=UTF-8>")
-    add_compile_options("$<$<OR:$<C_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:Clang>>:-finput-charset=UTF-8>")
-    add_compile_options("$<$<OR:$<C_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:Clang>>:-fexec-charset=UTF-8>")
+    add_compile_options(
+      "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-finput-charset=UTF-8>"
+      "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-fexec-charset=UTF-8>"
+    )
   endif()
 endif()

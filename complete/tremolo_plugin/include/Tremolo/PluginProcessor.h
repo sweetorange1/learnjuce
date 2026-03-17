@@ -54,14 +54,27 @@ public:
 
   void setTriggerThresholdDb(float thresholdDb) noexcept;
   float getTriggerThresholdDb() const noexcept;
+  void setInputFilterFrequencies(float highpassHz, float lowpassHz) noexcept;
+  float getInputHighpassHz() const noexcept;
+  float getInputLowpassHz() const noexcept;
 
 private:
+  void updateDetectionFilterCoefficients(float highpassHz,
+                                         float lowpassHz) noexcept;
+  float analyseFilteredInputPeak(const juce::AudioBuffer<float>& buffer) noexcept;
+
   Parameters parameters{*this};
   Tremolo tremolo;
   BypassTransitionSmoother bypassTransitionSmoother;
   std::atomic<double> currentSampleRate{0.};
   std::atomic<float> latestInputLevel{0.0f};
   std::atomic<float> triggerThresholdDb{-12.0f};
+  std::atomic<float> inputHighpassHz{20.0f};
+  std::atomic<float> inputLowpassHz{20000.0f};
+  std::vector<juce::IIRFilter> detectionHighpassFilters;
+  std::vector<juce::IIRFilter> detectionLowpassFilters;
+  float activeInputHighpassHz{20.0f};
+  float activeInputLowpassHz{20000.0f};
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginProcessor)
 };
