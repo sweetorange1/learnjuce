@@ -144,7 +144,7 @@ private:
   float peakLevel = 0.0f;            // 峰值电平
   bool isFlashing = false;           // 指示灯闪烁状态
   float flashTimer = 0.0f;           // 闪烁计时器
-  float thresholdDB = -12.0f;         // 触发阈值（dB）
+  float thresholdDB = tremolo::defaults::triggerThresholdDb;         // 触发阈值（dB）
   const float flashDuration = 0.2f;  // 闪烁持续时间（0.5秒）
   bool wasAboveThreshold = false;    // 上次是否超过阈值
 };

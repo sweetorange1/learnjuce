@@ -98,7 +98,8 @@ void PluginProcessor::prepareToPlay(double sampleRate,
 
   latestInputLevel.store(0.0f, std::memory_order_relaxed);
   latestWindowedInputPeak.store(0.0f, std::memory_order_relaxed);
-  triggerThresholdDb.store(-12.0f, std::memory_order_relaxed);
+  triggerThresholdDb.store(tremolo::defaults::triggerThresholdDb,
+                           std::memory_order_relaxed);
 
   resetLevelCaptureState();
 }

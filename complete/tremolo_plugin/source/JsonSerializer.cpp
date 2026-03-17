@@ -3,10 +3,10 @@ struct SerializableParameters {
   float rate;
   bool bypassed;
   juce::String waveform;
-  float x{0.5f};
-  float y{0.5f};
-  float gain{1.0f};
-  float levelCaptureWindowMs{50.0f};
+  float x{tremolo::defaults::xyX};
+  float y{tremolo::defaults::xyY};
+  float gain{tremolo::defaults::gain};
+  float levelCaptureWindowMs{tremolo::defaults::levelCaptureWindowMs};
 
   static constexpr auto marshallingVersion = 3;
 

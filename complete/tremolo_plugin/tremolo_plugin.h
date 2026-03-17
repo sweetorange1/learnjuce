@@ -39,6 +39,8 @@ END_JUCE_MODULE_DECLARATION
 
 #include "include/Tremolo/detail/StridedQueue.h"
 
+#include "include/Tremolo/Defaults.h"
+
 #include "include/Tremolo/Parameters.h"
 #include "include/Tremolo/CustomLookAndFeel.h"
 #include "include/Tremolo/JsonSerializer.h"

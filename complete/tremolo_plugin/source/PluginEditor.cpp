@@ -32,9 +32,13 @@ SettingsPanel::SettingsPanel() {
 
     levelWindowSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     levelWindowSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    levelWindowSlider.setRange(5.0, 500.0, 1.0);
-    levelWindowSlider.setSkewFactorFromMidPoint(50.0);
-    levelWindowSlider.setValue(50.0, juce::dontSendNotification);
+    levelWindowSlider.setRange(tremolo::defaults::levelCaptureWindowMsMin,
+                               tremolo::defaults::levelCaptureWindowMsMax,
+                               tremolo::defaults::levelCaptureWindowMsStep);
+    levelWindowSlider.setSkewFactorFromMidPoint(
+        tremolo::defaults::levelCaptureWindowMsSkewMid);
+    levelWindowSlider.setValue(tremolo::defaults::levelCaptureWindowMs,
+                               juce::dontSendNotification);
     levelWindowSlider.onValueChange = [this]() {
         const auto windowMs = static_cast<float>(levelWindowSlider.getValue());
         updateLevelWindowText(windowMs);
@@ -75,8 +79,9 @@ SettingsPanel::SettingsPanel() {
                                     juce::Colours::white.withAlpha(0.75f));
     addAndMakeVisible(inputFilterValueLabel);
 
-    updateInputFilterText(20.0f, 20000.0f);
-    updateLevelWindowText(50.0f);
+    updateInputFilterText(tremolo::defaults::inputHighpassHz,
+                          tremolo::defaults::inputLowpassHz);
+    updateLevelWindowText(tremolo::defaults::levelCaptureWindowMs);
 }
 
 void SettingsPanel::paint(juce::Graphics& g) {

@@ -13,7 +13,8 @@ juce::AudioParameterFloat& createModulationRateParameter(
       processor,
       std::make_unique<juce::AudioParameterFloat>(
           juce::ParameterID{"modulation.rate", versionHint}, "Modulation rate",
-          juce::NormalisableRange<float>{0.1f, 20.f, 0.01f, 0.4f}, 5.f,
+          juce::NormalisableRange<float>{0.1f, 20.f, 0.01f, 0.4f},
+          tremolo::defaults::modulationRateHz,
           juce::AudioParameterFloatAttributes{}.withLabel("Hz")));
 }
 
@@ -23,7 +24,8 @@ juce::AudioParameterBool& createBypassedParameter(
   return addParameterToProcessor(
       processor,
       std::make_unique<juce::AudioParameterBool>(
-          juce::ParameterID{"bypassed", versionHint}, "Bypass", false));
+          juce::ParameterID{"bypassed", versionHint}, "Bypass",
+          tremolo::defaults::bypassed));
 }
 
 juce::AudioParameterChoice& createWaveformParameter(
@@ -33,7 +35,8 @@ juce::AudioParameterChoice& createWaveformParameter(
       processor,
       std::make_unique<juce::AudioParameterChoice>(
           juce::ParameterID{"modulation.waveform", versionHint},
-          "Modulation waveform", juce::StringArray{"Sine", "Triangle"}, 0));
+          "Modulation waveform", juce::StringArray{"Sine", "Triangle"},
+          tremolo::defaults::waveformIndex));
 }
 
 juce::AudioParameterFloat& createXValueParameter(
@@ -43,7 +46,8 @@ juce::AudioParameterFloat& createXValueParameter(
       processor,
       std::make_unique<juce::AudioParameterFloat>(
           juce::ParameterID{"xy.x", versionHint}, "X Value",
-          juce::NormalisableRange<float>{0.0f, 1.0f, 0.01f}, 0.5f,
+          juce::NormalisableRange<float>{0.0f, 1.0f, 0.01f},
+          tremolo::defaults::xyX,
           juce::AudioParameterFloatAttributes{}.withLabel("")));
 }
 
@@ -54,7 +58,8 @@ juce::AudioParameterFloat& createYValueParameter(
       processor,
       std::make_unique<juce::AudioParameterFloat>(
           juce::ParameterID{"xy.y", versionHint}, "Y Value",
-          juce::NormalisableRange<float>{0.0f, 1.0f, 0.01f}, 0.5f,
+          juce::NormalisableRange<float>{0.0f, 1.0f, 0.01f},
+          tremolo::defaults::xyY,
           juce::AudioParameterFloatAttributes{}.withLabel("")));
 }
 
@@ -65,7 +70,8 @@ juce::AudioParameterFloat& createGainParameter(
       processor,
       std::make_unique<juce::AudioParameterFloat>(
           juce::ParameterID{"gain", versionHint}, "Gain",
-          juce::NormalisableRange<float>{0.1f, 10.0f, 0.1f}, 1.0f,
+          juce::NormalisableRange<float>{0.1f, 10.0f, 0.1f},
+          tremolo::defaults::gain,
           juce::AudioParameterFloatAttributes{}.withLabel("x")));
 }
 
@@ -77,8 +83,11 @@ juce::AudioParameterFloat& createLevelCaptureWindowMsParameter(
       std::make_unique<juce::AudioParameterFloat>(
           juce::ParameterID{"level.captureWindowMs", versionHint},
           "Level capture window",
-          juce::NormalisableRange<float>{5.0f, 500.0f, 1.0f, 0.4f},
-          50.0f,
+          juce::NormalisableRange<float>{tremolo::defaults::levelCaptureWindowMsMin,
+                                         tremolo::defaults::levelCaptureWindowMsMax,
+                                         tremolo::defaults::levelCaptureWindowMsStep,
+                                         tremolo::defaults::levelCaptureWindowMsSkew},
+          tremolo::defaults::levelCaptureWindowMs,
           juce::AudioParameterFloatAttributes{}.withLabel("ms")));
 }
 }  // namespace

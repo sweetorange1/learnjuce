@@ -78,13 +78,13 @@ private:
   std::atomic<double> currentSampleRate{0.};
   std::atomic<float> latestInputLevel{0.0f};
   std::atomic<float> latestWindowedInputPeak{0.0f};
-  std::atomic<float> triggerThresholdDb{-12.0f};
-  std::atomic<float> inputHighpassHz{20.0f};
-  std::atomic<float> inputLowpassHz{20000.0f};
+  std::atomic<float> triggerThresholdDb{tremolo::defaults::triggerThresholdDb};
+  std::atomic<float> inputHighpassHz{tremolo::defaults::inputHighpassHz};
+  std::atomic<float> inputLowpassHz{tremolo::defaults::inputLowpassHz};
   std::vector<juce::IIRFilter> detectionHighpassFilters;
   std::vector<juce::IIRFilter> detectionLowpassFilters;
-  float activeInputHighpassHz{20.0f};
-  float activeInputLowpassHz{20000.0f};
+  float activeInputHighpassHz{tremolo::defaults::inputHighpassHz};
+  float activeInputLowpassHz{tremolo::defaults::inputLowpassHz};
 
   // 电平捕捉窗口（跨多个block累计）
   int levelCaptureTargetSamples{0};
