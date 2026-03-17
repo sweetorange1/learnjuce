@@ -77,15 +77,15 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 endif()
 
 # Adds a plugin target.
-set(TREMOLO_PLUGIN_NAME "pupon")
+set(TREMOLO_PLUGIN_NAME "PlugIntoMix")
 juce_add_plugin(
   TremoloCoursePlugin
   PRODUCT_NAME
     ${TREMOLO_PLUGIN_NAME}
   VERSION
-    0.0.0 # 0 forces AU hosts to always refresh
+    1.0.0 # 0 forces AU hosts to always refresh
   COMPANY_NAME
-    "!!saac.music"
+    "IIsaac_music"
   PLUGIN_MANUFACTURER_CODE
     Wfsd
   PLUGIN_CODE
