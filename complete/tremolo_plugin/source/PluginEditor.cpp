@@ -7,12 +7,12 @@ SettingsPanel::SettingsPanel() {
     titleLabel.setText("Settings", juce::dontSendNotification);
     titleLabel.setJustificationType(juce::Justification::centred);
     titleLabel.setFont(juce::Font(juce::FontOptions(18.0f, juce::Font::bold)));
-    titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    titleLabel.setColour(juce::Label::textColourId, juce::Colour(0xFFE6E6E6));
     addAndMakeVisible(titleLabel);
 
     volumeLabel.setText("Input Level", juce::dontSendNotification);
     volumeLabel.setJustificationType(juce::Justification::centredLeft);
-    volumeLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    volumeLabel.setColour(juce::Label::textColourId, juce::Colour(0xFFD0D0D0));
     addAndMakeVisible(volumeLabel);
 
     waveformToggle.setButtonText("Scrolling Curve");
@@ -27,7 +27,7 @@ SettingsPanel::SettingsPanel() {
 
     levelWindowLabel.setText("Level Window", juce::dontSendNotification);
     levelWindowLabel.setJustificationType(juce::Justification::centredLeft);
-    levelWindowLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    levelWindowLabel.setColour(juce::Label::textColourId, juce::Colour(0xFFD0D0D0));
     addAndMakeVisible(levelWindowLabel);
 
     levelWindowSlider.setSliderStyle(juce::Slider::LinearHorizontal);
@@ -50,12 +50,12 @@ SettingsPanel::SettingsPanel() {
 
     levelWindowValueLabel.setJustificationType(juce::Justification::centredLeft);
     levelWindowValueLabel.setColour(juce::Label::textColourId,
-                                    juce::Colours::white.withAlpha(0.75f));
+                                    juce::Colour(0xFFB0B0B0));
     addAndMakeVisible(levelWindowValueLabel);
 
     inputFilterLabel.setText("Input Filter", juce::dontSendNotification);
     inputFilterLabel.setJustificationType(juce::Justification::centredLeft);
-    inputFilterLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    inputFilterLabel.setColour(juce::Label::textColourId, juce::Colour(0xFFD0D0D0));
     addAndMakeVisible(inputFilterLabel);
 
     inputFilterSlider.setSliderStyle(juce::Slider::TwoValueHorizontal);
@@ -76,7 +76,7 @@ SettingsPanel::SettingsPanel() {
 
     inputFilterValueLabel.setJustificationType(juce::Justification::centredLeft);
     inputFilterValueLabel.setColour(juce::Label::textColourId,
-                                    juce::Colours::white.withAlpha(0.75f));
+                                    juce::Colour(0xFFB0B0B0));
     addAndMakeVisible(inputFilterValueLabel);
 
     updateInputFilterText(tremolo::defaults::inputHighpassHz,
@@ -90,7 +90,7 @@ void SettingsPanel::paint(juce::Graphics& g) {
     g.fillRoundedRectangle(getLocalBounds().toFloat(), 10.0f);
     
     // 绘制边框
-    g.setColour(juce::Colours::white);
+    g.setColour(juce::Colour(0xFF6A6A6A));
     g.drawRoundedRectangle(getLocalBounds().toFloat(), 10.0f, 2.0f);
 }
 
@@ -275,7 +275,7 @@ void XYController::paint(juce::Graphics& g) {
     // 绘制目标点标记（绿色十字）
     float targetXPos = targetX * bounds.getWidth();
     float targetYPos = targetY * bounds.getHeight();
-    g.setColour(juce::Colours::green);
+    g.setColour(juce::Colour(0xFF9A9A9A));
     g.drawLine(targetXPos - 8.0f, targetYPos, targetXPos + 8.0f, targetYPos, 2.0f);
     g.drawLine(targetXPos, targetYPos - 8.0f, targetXPos, targetYPos + 8.0f, 2.0f);
     
@@ -284,7 +284,7 @@ void XYController::paint(juce::Graphics& g) {
     float yPos = yValue * bounds.getHeight();
     
     // 绘制当前位置指示器（白色圆点）
-    g.setColour(juce::Colours::white);
+    g.setColour(juce::Colour(0xFFE6E6E6));
     g.fillEllipse(xPos - 5.0f, yPos - 5.0f, 10.0f, 10.0f);
     
     // 绘制指示器边框
@@ -302,7 +302,7 @@ void XYController::paint(juce::Graphics& g) {
     
     // 设置字体和颜色
     g.setFont(juce::Font(juce::FontOptions{}.withHeight(14.0f)));
-    g.setColour(juce::Colours::white);
+    g.setColour(juce::Colour(0xFFE6E6E6));
     
     // 计算文本位置（右下角，留出边距）
     auto textBounds = bounds.withTrimmedRight(10).withTrimmedBottom(10);
@@ -342,31 +342,32 @@ PluginEditor::PluginEditor(PluginProcessor& p)
       setSize(700, 700);
   }
 
-  // 设置jj.png图片：从文件加载图片资源
-  juce::File jjImageFile("J:/C++/myfirst/complete/assets/jj.png");
-  if (jjImageFile.existsAsFile()) {
-      jjImage.setImage(juce::ImageFileFormat::loadFrom(jjImageFile));
+  // 设置jj.png图片：从内存中加载jj图片资源（BinaryData），避免依赖开发机磁盘路径
+  const auto jjImg = juce::ImageCache::getFromMemory(assets::jj_png, assets::jj_pngSize);
+  if (jjImg.isValid()) {
+      jjImage.setImage(jjImg);
   }
   // 在第一次指示灯亮起前，将jj图片设置为隐藏状态
   jjImage.setVisible(false);
   // 将jj图片组件添加到界面
   addAndMakeVisible(jjImage);
 
-  // 设置设置按钮：从文件加载设置图标
-  juce::File settingsImageFile("J:/C++/myfirst/complete/assets/setting.png");
-  if (settingsImageFile.existsAsFile()) {
+  // 设置设置按钮：从内存中加载设置图标（BinaryData），避免依赖开发机磁盘路径
+  const auto settingsIcon = juce::ImageCache::getFromMemory(assets::setting_png, assets::setting_pngSize);
+  if (settingsIcon.isValid()) {
       settingsButton.setImages(false, true, true,
-          juce::ImageFileFormat::loadFrom(settingsImageFile), // 正常状态图片
+          settingsIcon, // 正常状态图片
           1.0f, // 正常状态图片不透明度
           juce::Colours::transparentBlack, // 正常状态覆盖颜色
-          juce::ImageFileFormat::loadFrom(settingsImageFile), // 悬停状态图片
+          settingsIcon, // 悬停状态图片
           1.0f, // 悬停状态图片不透明度
           juce::Colours::white.withAlpha(0.3f), // 悬停状态覆盖颜色
-          juce::ImageFileFormat::loadFrom(settingsImageFile), // 按下状态图片
+          settingsIcon, // 按下状态图片
           1.0f, // 按下状态图片不透明度
           juce::Colours::white.withAlpha(0.5f) // 按下状态覆盖颜色
       );
   }
+
   // 设置按钮点击事件
   settingsButton.onClick = [this]() {
       // 切换设置面板的可见状态
@@ -422,7 +423,7 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   // addAndMakeVisible(logo);
 
   // 定义侧边标签的字体颜色：使用JUCE的颜色系统（字的颜色）
-  const auto sideFontColor = juce::Colour{0xFF6EA0C7};
+  const auto sideFontColor = juce::Colour{0xFFC8C8C8};
 
   // 设置旁路标签的对齐方式为左对齐
   // bypassLabel.setJustificationType(juce::Justification::left);
@@ -560,7 +561,10 @@ void PluginEditor::timerCallback() {
       // 确保每次动画都从正确的初始位置开始
       // 获取当前的基础边界，确保初始位置计算准确
       auto bounds = getLocalBounds();
-      auto baseBounds = bounds.withSizeKeepingCentre(51, 325).translated(0, 200);
+const auto jjW = juce::jmax(1, juce::roundToInt(51.0f * tremolo::defaults::jjImageScale));
+const auto jjH = juce::jmax(1, juce::roundToInt(325.0f * tremolo::defaults::jjImageScale));
+      auto baseBounds = bounds.withSizeKeepingCentre(jjW, jjH).translated(0, 200);
+
       
       // 设置运动参数：从“起始偏移”向上移动到“最高点偏移”
       startYPosition = tremolo::defaults::jjAnimationStartYOffsetPx;
@@ -642,10 +646,11 @@ void PluginEditor::resized() {
                            tremolo::defaults::indicatorLightWidthPx,
                            tremolo::defaults::indicatorLightHeightPx);
 
-  // 设置jj.png图片的位置和大小：居中靠下，大小为200x200像素
-  // withSizeKeepingCentre：保持中心点不变，设置指定大小
-  // translated(0, 150)：向下平移150像素，实现"靠下"效果
-  auto baseBounds = bounds.withSizeKeepingCentre(51, 325).translated(0, 200);
+  // 设置jj.png图片的位置和大小：基准尺寸(51x325) * 缩放比
+const auto jjW = juce::jmax(1, juce::roundToInt(51.0f * tremolo::defaults::jjImageScale));
+const auto jjH = juce::jmax(1, juce::roundToInt(325.0f * tremolo::defaults::jjImageScale));
+  auto baseBounds = bounds.withSizeKeepingCentre(jjW, jjH).translated(0, 200);
+
   
   // 图片位置管理逻辑：根据动画状态和第一次指示灯状态决定图片显示和位置
   // 如果正在动画中，使用动画系统设置位置；否则根据第一次指示灯状态处理
@@ -716,16 +721,22 @@ void PluginEditor::updateAnimation() {
             
             // 强制设置图片回到初始位置，确保归位准确
             auto bounds = getLocalBounds();
-            auto baseBounds = bounds.withSizeKeepingCentre(51, 325).translated(0, 200);
+const auto jjW = juce::jmax(1, juce::roundToInt(51.0f * tremolo::defaults::jjImageScale));
+const auto jjH = juce::jmax(1, juce::roundToInt(325.0f * tremolo::defaults::jjImageScale));
+            auto baseBounds = bounds.withSizeKeepingCentre(jjW, jjH).translated(0, 200);
             jjImage.setBounds(baseBounds.translated(
                 0, -static_cast<int>(tremolo::defaults::jjAnimationStartYOffsetPx)));
             return; // 直接返回，不再执行后续位置计算
+
         }
     }
     
     // 更新图片位置：根据当前动画状态计算Y轴偏移量
     auto bounds = getLocalBounds();
-    auto baseBounds = bounds.withSizeKeepingCentre(51, 325).translated(0, 200);
+const auto jjW = juce::jmax(1, juce::roundToInt(51.0f * tremolo::defaults::jjImageScale));
+const auto jjH = juce::jmax(1, juce::roundToInt(325.0f * tremolo::defaults::jjImageScale));
+    auto baseBounds = bounds.withSizeKeepingCentre(jjW, jjH).translated(0, 200);
+
     
     float currentYOffset = 0.0f;
     if (isMovingUp) {

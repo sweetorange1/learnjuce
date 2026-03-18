@@ -3,7 +3,7 @@
 namespace tremolo {
 class CustomLookAndFeel : public juce::LookAndFeel_V4 {
 public:
-  enum class Colors : size_t { orange, paleBlue };
+  enum class Colors : size_t { textSecondary, textPrimary };
 
   static juce::Colour getColor(Colors colorName);
 

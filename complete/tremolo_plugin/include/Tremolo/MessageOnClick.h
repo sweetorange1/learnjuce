@@ -13,7 +13,7 @@ public:
     popup.setAlwaysOnTop(true);
 
     message.setColour(
-        CustomLookAndFeel::getColor(CustomLookAndFeel::Colors::paleBlue));
+        CustomLookAndFeel::getColor(CustomLookAndFeel::Colors::textPrimary));
     message.setJustification(juce::Justification::centred);
 
     target.addMouseListener(this, true);

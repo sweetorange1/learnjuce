@@ -140,15 +140,17 @@ private:
       auto bounds = getLocalBounds().toFloat();
       
       // 根据状态设置指示灯颜色
-      juce::Colour indicatorColor = shouldFlash ? juce::Colours::red : juce::Colours::darkgrey;
+      juce::Colour indicatorColor = shouldFlash ? juce::Colour(0xFFE0E0E0)
+                                                : juce::Colour(0xFF3A3A3A);
       
       // 绘制指示灯背景（圆形）
       g.setColour(indicatorColor);
       g.fillEllipse(bounds);
       
       // 绘制指示灯边框
-      g.setColour(juce::Colours::white);
+      g.setColour(juce::Colour(0xFF8A8A8A));
       g.drawEllipse(bounds, 2.0f);
+
     }
     
     void setFlashing(bool flashing) {

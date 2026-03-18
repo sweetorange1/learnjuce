@@ -85,11 +85,11 @@ void VolumeMeter::paint(juce::Graphics& g) {
             // 根据电平值设置颜色（绿色到黄色到红色）
             juce::Colour levelColor;
             if (currentLevelValue < 0.7f) {
-                levelColor = juce::Colours::green;
+                levelColor = juce::Colour(0xFF6F6F6F);
             } else if (currentLevelValue < 0.9f) {
-                levelColor = juce::Colours::yellow;
+                levelColor = juce::Colour(0xFFB0B0B0);
             } else {
-                levelColor = juce::Colours::red;
+                levelColor = juce::Colour(0xFFE0E0E0);
             }
             
             g.setColour(levelColor);

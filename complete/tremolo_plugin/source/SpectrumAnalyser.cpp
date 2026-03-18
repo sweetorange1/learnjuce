@@ -110,9 +110,10 @@ void SpectrumAnalyser::paint(juce::Graphics& g)
     // 绘制频谱路径
     {
         juce::ScopedLock lock(pathLock);
-        g.setColour(juce::Colours::cyan.withAlpha(0.8f));
+        g.setColour(juce::Colour(0xFFD0D0D0).withAlpha(0.8f));
         g.strokePath(spectrumPath, juce::PathStrokeType(2.0f));
     }
+
     
     // 绘制频率标签
     g.setColour(juce::Colours::white.withAlpha(0.7f));

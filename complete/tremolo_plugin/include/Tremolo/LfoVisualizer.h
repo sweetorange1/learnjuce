@@ -44,8 +44,8 @@ private:
   [[nodiscard]] juce::AffineTransform getLfoCurveTransform() const;
 
   float curveWidth{4.f};
-  juce::Colour curveColor{juce::Colours::black};
-  juce::Colour backgroundColour{juce::Colours::white};
+  juce::Colour curveColor{juce::Colour(0xFFD0D0D0)};
+  juce::Colour backgroundColour{juce::Colour(0xFF1A1A1A)};
   ReadAllLfoSamples readAllLfoSamples;
   GetCurrentSampleRate getCurrentSampleRate;
   IsBypassed isBypassed;

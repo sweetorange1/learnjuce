@@ -57,10 +57,10 @@ private:
 
     // 颜色配置
     juce::Colour meterBackground{juce::Colour(0xFF222222)};     // 背景色
-    juce::Colour meterForeground{juce::Colour(0xFF00FF00)};      // 前景色（绿色）
-    juce::Colour peakIndicator{juce::Colour(0xFFFF0000)};       // 峰值指示器（红色）
-    juce::Colour waveformColor{juce::Colour(0xFF6EA0C7)};       // 波形颜色
-    juce::Colour thresholdColor{juce::Colours::orange};         // 阈值线颜色
+    juce::Colour meterForeground{juce::Colour(0xFFBDBDBD)};     // 前景色（灰）
+    juce::Colour peakIndicator{juce::Colour(0xFFE6E6E6)};       // 峰值指示器（亮灰）
+    juce::Colour waveformColor{juce::Colour(0xFFC8C8C8)};       // 波形颜色（灰）
+    juce::Colour thresholdColor{juce::Colour(0xFF9A9A9A)};      // 阈值线颜色（灰）
 
     static constexpr float minThresholdDb = -60.0f;
     static constexpr float maxThresholdDb = 0.0f;

@@ -56,7 +56,10 @@ inline constexpr float indicatorFlashDurationScale = 0.8f;
 
 // jj.png 动画配置（像素）：起始位置与最高点位置（用于调整上下往复动画幅度）
 // 说明：这里使用“向上偏移量”，数值越大，图片越往上移动。
-inline constexpr float jjAnimationStartYOffsetPx = -10.0f;
-inline constexpr float jjAnimationPeakYOffsetPx = 200.0f;
+inline constexpr float jjAnimationStartYOffsetPx = -160.0f;
+inline constexpr float jjAnimationPeakYOffsetPx = 35.0f;
+
+// jj.png 在插件界面中的缩放比：1.0=原始尺寸；>1 放大；<1 缩小
+inline constexpr float jjImageScale = 5.5f;
 
 }  // namespace tremolo::defaults
