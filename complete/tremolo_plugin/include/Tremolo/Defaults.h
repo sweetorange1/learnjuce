@@ -17,6 +17,10 @@ inline constexpr int xyControllerHeightPx = 550;
 inline constexpr int xyControllerLeftPx = 20;
 inline constexpr int xyControllerTopPx = 40;
 
+// XY 控制点（tone.png）绘制尺寸（像素）：以图片中心点作为坐标
+inline constexpr int xyToneMarkerWidthPx = 59;
+inline constexpr int xyToneMarkerHeightPx = 75;
+
 // 设置按钮布局（像素）：固定尺寸 + 左上角偏移
 inline constexpr int settingsButtonWidthPx = 27;
 inline constexpr int settingsButtonHeightPx = 27;

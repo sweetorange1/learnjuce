@@ -194,6 +194,10 @@ void SettingsPanel::updateLevelWindowText(float windowMs) {
 XYController::XYController() {
     // 设置XY控制器可以接收鼠标事件
     setInterceptsMouseClicks(true, true);
+
+    // 加载控制点图片（tone.png）：从内存资源读取
+    toneMarkerImage = juce::ImageCache::getFromMemory(assets::tone_png,
+                                                      assets::tone_pngSize);
 }
 
 // 鼠标按下事件处理
@@ -226,14 +230,29 @@ void XYController::setValues(float newXValue, float newYValue, bool sendCallback
 void XYController::updatePosition(juce::Point<float> position) {
     // 获取组件大小
     auto bounds = getLocalBounds().toFloat();
-    
+
+    // 以控制点图片的“中心点”作为坐标含义，并限制中心点不要让图片跑出边界
+    const float halfW = tremolo::defaults::xyToneMarkerWidthPx * 0.5f;
+    const float halfH = tremolo::defaults::xyToneMarkerHeightPx * 0.5f;
+
+    const float minX = bounds.getX() + halfW;
+    const float maxX = bounds.getRight() - halfW;
+    const float minY = bounds.getY() + halfH;
+    const float maxY = bounds.getBottom() - halfH;
+
+    const float cx = juce::jlimit(minX, maxX, position.x);
+    const float cy = juce::jlimit(minY, maxY, position.y);
+
+    const float denomW = juce::jmax(1.0f, maxX - minX);
+    const float denomH = juce::jmax(1.0f, maxY - minY);
+
     // 计算X和Y值（范围0.0到1.0）
-    xValue = juce::jlimit(0.0f, 1.0f, position.x / bounds.getWidth());
-    yValue = juce::jlimit(0.0f, 1.0f, position.y / bounds.getHeight());
-    
+    xValue = juce::jlimit(0.0f, 1.0f, (cx - minX) / denomW);
+    yValue = juce::jlimit(0.0f, 1.0f, (cy - minY) / denomH);
+
     // 触发重绘
     repaint();
-    
+
     // 如果有回调函数，调用它
     if (valueChangeCallback) {
         valueChangeCallback(xValue, yValue);
@@ -279,17 +298,40 @@ void XYController::paint(juce::Graphics& g) {
     g.drawLine(targetXPos - 8.0f, targetYPos, targetXPos + 8.0f, targetYPos, 2.0f);
     g.drawLine(targetXPos, targetYPos - 8.0f, targetXPos, targetYPos + 8.0f, 2.0f);
     
-    // 计算当前位置
-    float xPos = xValue * bounds.getWidth();
-    float yPos = yValue * bounds.getHeight();
-    
-    // 绘制当前位置指示器（白色圆点）
-    g.setColour(juce::Colour(0xFFE6E6E6));
-    g.fillEllipse(xPos - 5.0f, yPos - 5.0f, 10.0f, 10.0f);
-    
-    // 绘制指示器边框
-    g.setColour(juce::Colours::black);
-    g.drawEllipse(xPos - 5.0f, yPos - 5.0f, 10.0f, 10.0f, 2.0f);
+    // 计算当前位置（以控制点图片中心点作为坐标）
+    const float halfW = tremolo::defaults::xyToneMarkerWidthPx * 0.5f;
+    const float halfH = tremolo::defaults::xyToneMarkerHeightPx * 0.5f;
+
+    const float minX = bounds.getX() + halfW;
+    const float maxX = bounds.getRight() - halfW;
+    const float minY = bounds.getY() + halfH;
+    const float maxY = bounds.getBottom() - halfH;
+
+    const float xPos = minX + xValue * juce::jmax(1.0f, maxX - minX);
+    const float yPos = minY + yValue * juce::jmax(1.0f, maxY - minY);
+
+    // 绘制当前位置指示器（tone.png）
+    const auto markerBounds = juce::Rectangle<float>{
+        xPos - halfW,
+        yPos - halfH,
+        static_cast<float>(tremolo::defaults::xyToneMarkerWidthPx),
+        static_cast<float>(tremolo::defaults::xyToneMarkerHeightPx)};
+
+    if (toneMarkerImage.isValid()) {
+        g.drawImageWithin(toneMarkerImage,
+                          static_cast<int>(markerBounds.getX()),
+                          static_cast<int>(markerBounds.getY()),
+                          static_cast<int>(markerBounds.getWidth()),
+                          static_cast<int>(markerBounds.getHeight()),
+                          juce::RectanglePlacement::stretchToFit);
+    } else {
+        // fallback：图片没加载到时，用灰色圆点兜底
+        g.setColour(juce::Colour(0xFFE6E6E6));
+        g.fillEllipse(markerBounds);
+        g.setColour(juce::Colours::black);
+        g.drawEllipse(markerBounds, 2.0f);
+    }
+
     
     // 计算距离和增益信息
     const auto distanceToTarget = std::sqrt(std::pow(xValue - targetX, 2.0f) + std::pow(yValue - targetY, 2.0f));

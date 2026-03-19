@@ -32,9 +32,13 @@ private:
     float xValue{0.5f}; // X值，范围0.0到1.0
     float yValue{0.5f}; // Y值，范围0.0到1.0
     std::function<void(float, float)> valueChangeCallback;
+
+    // 控制点图片（tone.png）缓存
+    juce::Image toneMarkerImage;
     
     // 更新位置并触发回调
     void updatePosition(juce::Point<float> position);
+
 };
 
 // 设置面板组件

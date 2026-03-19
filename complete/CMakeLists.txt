@@ -124,6 +124,7 @@ juce_add_binary_data(tremolo_plugin_assets
     assets/Logo.png
     assets/setting.png
     assets/jj.png
+    assets/tone.png
     assets/Inter-Bold.ttf
     assets/Inter-Medium.ttf
 )
