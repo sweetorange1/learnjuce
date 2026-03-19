@@ -8,8 +8,12 @@ inline constexpr float modulationRateHz = 5.0f;
 inline constexpr bool bypassed = false;
 inline constexpr int waveformIndex = 0; // 0=Sine
 
-inline constexpr float xyX = 0.5f;
-inline constexpr float xyY = 0.3f;
+inline constexpr float xyX = 1.0f;
+inline constexpr float xyY = 1.0f;
+
+// XY 目标点：距离该点越近，效果越强（用于DSP映射与UI十字标记）
+inline constexpr float xyTargetX = 0.5f;
+inline constexpr float xyTargetY = 0.38f;
 
 // XY 控制器布局（像素）：固定尺寸 + 左上角偏移
 inline constexpr int xyControllerWidthPx = 550;
@@ -20,6 +24,14 @@ inline constexpr int xyControllerTopPx = 40;
 // XY 控制点（tone.png）绘制尺寸（像素）：以图片中心点作为坐标
 inline constexpr int xyToneMarkerWidthPx = 59;
 inline constexpr int xyToneMarkerHeightPx = 75;
+
+// 公式映射（锯齿化）默认参数：x' = asinh(x*A*10)/pi + (round((-x/2)*(B*20+1))-(-x/2)*(B*20+1))*C
+inline constexpr float sawMapA = 1.0f;
+inline constexpr float sawMapB = 1.0f;
+inline constexpr float sawMapC = 0.2f;
+
+// XY 到“公式映射湿度”的距离阈值：距离>=阈值为纯干声；距离=0为纯湿声
+inline constexpr float sawWetDistanceThreshold = 0.25f;
 
 // 设置按钮布局（像素）：固定尺寸 + 左上角偏移
 inline constexpr int settingsButtonWidthPx = 27;
@@ -44,7 +56,7 @@ inline constexpr float levelCaptureWindowMsSkew = 0.4f;
 inline constexpr float levelCaptureWindowMsSkewMid = 60.0f;
 
 // 输入检测滤波器默认值（Hz）
-inline constexpr float inputHighpassHz = 1300.0f;
+inline constexpr float inputHighpassHz = 20.0f;
 inline constexpr float inputLowpassHz = 20000.0f;
 
 // 电平检测阈值默认值（dB）

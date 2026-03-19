@@ -1,3 +1,7 @@
+#include "../include/Tremolo/PluginEditor.h"
+#include "../include/Tremolo/Defaults.h"
+#include <TremoloPluginAssets.h>
+
 // tremolo命名空间：C++中使用命名空间来组织代码，避免命名冲突
 namespace tremolo {
 
@@ -287,9 +291,9 @@ void XYController::paint(juce::Graphics& g) {
     g.setColour(juce::Colour(0xFF888888));
     g.drawRect(bounds, 2.0f);
     
-    // 目标点坐标（与Tremolo.h中保持一致）
-    constexpr float targetX = 0.5f;
-    constexpr float targetY = 0.38f;
+    // 目标点坐标（与 Defaults.h 中保持一致）
+    constexpr float targetX = tremolo::defaults::xyTargetX;
+    constexpr float targetY = tremolo::defaults::xyTargetY;
     
     // 绘制目标点标记（绿色十字）
     float targetXPos = targetX * bounds.getWidth();
