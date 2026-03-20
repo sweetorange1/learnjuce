@@ -1,4 +1,6 @@
 #include <cmath>
+#include <cstdint>
+#include <limits>
 // 用于序列化/反序列化插件状态（JSON包装层）
 #include <juce_core/juce_core.h>
 
@@ -144,6 +146,50 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     midiTriggerSequence.fetch_add(1, std::memory_order_relaxed);
   }
 
+  // BPM输入：读取宿主BPM，并按设定音符时值对齐触发（每个block最多触发一次）
+  {
+    double bpm = 0.0;
+    double ppq = 0.0;
+    bool hasTransportInfo = false;
+
+    if (auto* playHead = getPlayHead()) {
+      juce::AudioPlayHead::CurrentPositionInfo pos;
+      if (playHead->getCurrentPosition(pos)) {
+        bpm = pos.bpm;
+        ppq = pos.ppqPosition;
+        hasTransportInfo = true;
+      }
+    }
+
+    const auto divisionIndex = bpmDivisionIndex.load(std::memory_order_relaxed);
+    const int clampedIndex = juce::jlimit(0, tremolo::defaults::bpmDivisionCount - 1, divisionIndex);
+
+    // 0=1/1, 1=1/2, 2=1/4, 3=1/8 ... => 每拍(四分音符)ppq递增1.0
+    // 目标：每个“分度”触发一次
+    // stepsPerQuarter = (分度触发次数/每四分音符)
+    // 例如：
+    // - 1/1: 每4个四分音符触发一次 => stepsPerQuarter=0.25
+    // - 1/2: 每2个四分音符触发一次 => stepsPerQuarter=0.5
+    // - 1/4: 每1个四分音符触发一次 => stepsPerQuarter=1
+    // - 1/8: 每0.5个四分音符触发一次 => stepsPerQuarter=2
+    const double stepsPerQuarter = std::pow(2.0, static_cast<double>(clampedIndex)) / 4.0;
+
+    if (clampedIndex != bpmLastDivisionIndex) {
+      bpmLastDivisionIndex = clampedIndex;
+      bpmHasLastStep = false;
+    }
+
+    if (hasTransportInfo && bpm > 0.0 && stepsPerQuarter > 0.0 && std::isfinite(ppq)) {
+      const auto stepIndex = static_cast<int64_t>(std::floor(ppq * stepsPerQuarter + 1e-9));
+
+      if (!bpmHasLastStep || stepIndex != bpmLastStepIndex) {
+        bpmHasLastStep = true;
+        bpmLastStepIndex = stepIndex;
+        bpmTriggerSequence.fetch_add(1, std::memory_order_relaxed);
+      }
+    }
+  }
+
   // ScopedNoDenormals用于禁用非规格化浮点数处理，提高性能
   juce::ScopedNoDenormals noDenormals;
   // 获取输入和输出通道总数
@@ -207,6 +253,8 @@ void PluginProcessor::getStateInformation(juce::MemoryBlock& destData) {
   root->setProperty("__state_version__", 1);
   root->setProperty("parameters", parsingResult.wasOk() ? parametersJson : juce::var{});
   root->setProperty("midiModeEnabled", midiModeEnabled.load(std::memory_order_relaxed));
+  root->setProperty("bpmModeEnabled", bpmModeEnabled.load(std::memory_order_relaxed));
+  root->setProperty("bpmDivisionIndex", bpmDivisionIndex.load(std::memory_order_relaxed));
 
   juce::MemoryOutputStream outputStream{destData, true};
   juce::JSON::writeToStream(outputStream, juce::var(root.get()),
@@ -231,6 +279,13 @@ void PluginProcessor::setStateInformation(const void* data, int sizeInBytes) {
       // 新格式
       const auto enabled = static_cast<bool>(obj->getProperty("midiModeEnabled"));
       midiModeEnabled.store(enabled, std::memory_order_relaxed);
+
+      const auto bpmEnabled = static_cast<bool>(obj->getProperty("bpmModeEnabled"));
+      bpmModeEnabled.store(bpmEnabled, std::memory_order_relaxed);
+
+      const auto bpmDiv = static_cast<int>(obj->getProperty("bpmDivisionIndex"));
+      bpmDivisionIndex.store(juce::jlimit(0, tremolo::defaults::bpmDivisionCount - 1, bpmDiv),
+                             std::memory_order_relaxed);
 
       const auto parametersVar = obj->getProperty("parameters");
       const auto parametersText = juce::JSON::toString(parametersVar);
@@ -301,6 +356,27 @@ void PluginProcessor::setMidiModeEnabled(bool enabled) noexcept {
 
 bool PluginProcessor::getMidiModeEnabled() const noexcept {
   return midiModeEnabled.load(std::memory_order_relaxed);
+}
+
+uint64_t PluginProcessor::getBpmTriggerSequence() const noexcept {
+  return bpmTriggerSequence.load(std::memory_order_relaxed);
+}
+
+void PluginProcessor::setBpmModeEnabled(bool enabled) noexcept {
+  bpmModeEnabled.store(enabled, std::memory_order_relaxed);
+}
+
+bool PluginProcessor::getBpmModeEnabled() const noexcept {
+  return bpmModeEnabled.load(std::memory_order_relaxed);
+}
+
+void PluginProcessor::setBpmDivisionIndex(int index) noexcept {
+  bpmDivisionIndex.store(juce::jlimit(0, tremolo::defaults::bpmDivisionCount - 1, index),
+                         std::memory_order_relaxed);
+}
+
+int PluginProcessor::getBpmDivisionIndex() const noexcept {
+  return bpmDivisionIndex.load(std::memory_order_relaxed);
 }
 
 void PluginProcessor::setInputFilterFrequencies(float highpassHz,

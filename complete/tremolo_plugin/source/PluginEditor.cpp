@@ -103,21 +103,56 @@ SettingsPanel::SettingsPanel() {
     volumeMeter.setDisplayMode(true);
     addAndMakeVisible(volumeMeter);
 
-    // switch midi mod：切换指示灯/XY动画触发器来源（音频阈值 <-> MIDI输入）
-    midiModeButton.setButtonText("switch midi mod");
-    midiModeButton.setClickingTogglesState(true);
-    // 统一黑灰主题（尽量简单）
-    midiModeButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF1E1E1E));
-    midiModeButton.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xFF303030));
-    midiModeButton.setColour(juce::TextButton::textColourOffId, juce::Colour(0xFFE6E6E6));
-    midiModeButton.setColour(juce::TextButton::textColourOnId, juce::Colour(0xFFE6E6E6));
-    midiModeButton.onClick = [this]() {
-        setMidiMode(midiModeButton.getToggleState());
-        if (midiModeChangedCallback) {
-            midiModeChangedCallback(midiModeEnabled);
+    // trigger mod：一个按钮循环切换触发源（Audio -> MIDI -> BPM -> Audio）
+    triggerModeButton.setButtonText("switch to midi mod");
+    triggerModeButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF1E1E1E));
+    triggerModeButton.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xFF303030));
+    triggerModeButton.setColour(juce::TextButton::textColourOffId, juce::Colour(0xFFE6E6E6));
+    triggerModeButton.setColour(juce::TextButton::textColourOnId, juce::Colour(0xFFE6E6E6));
+    triggerModeButton.onClick = [this]() {
+        TriggerSource next = TriggerSource::Audio;
+        switch (triggerSource) {
+            case TriggerSource::Audio: next = TriggerSource::Midi; break;
+            case TriggerSource::Midi:  next = TriggerSource::Bpm;  break;
+            case TriggerSource::Bpm:   next = TriggerSource::Audio; break;
+        }
+
+        setTriggerSource(next);
+        if (triggerSourceChangedCallback) {
+            triggerSourceChangedCallback(triggerSource);
         }
     };
-    addAndMakeVisible(midiModeButton);
+    addAndMakeVisible(triggerModeButton);
+
+    // BPM触发频率（仅BPM模式显示）
+    bpmDivisionLabel.setText("BPM Rate", juce::dontSendNotification);
+    bpmDivisionLabel.setJustificationType(juce::Justification::centredLeft);
+    bpmDivisionLabel.setColour(juce::Label::textColourId, juce::Colour(0xFFD0D0D0));
+    addAndMakeVisible(bpmDivisionLabel);
+
+    bpmDivisionSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    bpmDivisionSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    bpmDivisionSlider.setRange(0, tremolo::defaults::bpmDivisionCount - 1, 1);
+    bpmDivisionSlider.setValue(tremolo::defaults::bpmDivisionIndexDefault,
+                               juce::dontSendNotification);
+    bpmDivisionSlider.onValueChange = [this]() {
+        const auto idx = static_cast<int>(std::llround(bpmDivisionSlider.getValue()));
+        setBpmDivisionIndex(idx);
+        if (bpmDivisionChangedCallback) {
+            bpmDivisionChangedCallback(idx);
+        }
+    };
+    addAndMakeVisible(bpmDivisionSlider);
+
+    bpmDivisionValueLabel.setJustificationType(juce::Justification::centredLeft);
+    bpmDivisionValueLabel.setColour(juce::Label::textColourId,
+                                    juce::Colour(0xFFB0B0B0));
+    addAndMakeVisible(bpmDivisionValueLabel);
+
+    // 初始隐藏：仅BPM模式显示
+    bpmDivisionLabel.setVisible(false);
+    bpmDivisionSlider.setVisible(false);
+    bpmDivisionValueLabel.setVisible(false);
 
     levelWindowLabel.setText("Detail", juce::dontSendNotification);
     levelWindowLabel.setJustificationType(juce::Justification::centredLeft);
@@ -176,18 +211,36 @@ SettingsPanel::SettingsPanel() {
     updateInputFilterText(tremolo::defaults::inputHighpassHz,
                           tremolo::defaults::inputLowpassHz);
     updateLevelWindowText(tremolo::defaults::levelCaptureWindowMs);
+    setBpmDivisionIndex(tremolo::defaults::bpmDivisionIndexDefault);
 }
 
-void SettingsPanel::setMidiMode(bool enabled) {
-    midiModeEnabled = enabled;
-    midiModeButton.setToggleState(enabled, juce::dontSendNotification);
-    midiModeButton.setButtonText(enabled ? "switch audio mod" : "switch midi mod");
+void SettingsPanel::updateTriggerModeButtonText() {
+    // 一个按钮循环切换，按钮文字显示“下一次点击会切到哪个模式”
+    switch (triggerSource) {
+        case TriggerSource::Audio: triggerModeButton.setButtonText("switch to midi mod"); break;
+        case TriggerSource::Midi:  triggerModeButton.setButtonText("switch to bpm mod");  break;
+        case TriggerSource::Bpm:   triggerModeButton.setButtonText("switch to audio mod"); break;
+    }
+}
 
-    // MIDI模式下：隐藏Detail/InputFilter控制条；电平检测标题改为Midi In；左侧dB提示隐藏
-    volumeLabel.setText(enabled ? "Midi In" : "Thresh", juce::dontSendNotification);
-    volumeMeter.setShowDbScale(!enabled);
+void SettingsPanel::setTriggerSource(TriggerSource source) {
+    triggerSource = source;
+    updateTriggerModeButtonText();
 
-    const bool showAudioControls = !enabled;
+    const bool specialMode = (triggerSource != TriggerSource::Audio);
+
+    // 模式下：电平检测标题切换；dB提示隐藏
+    if (triggerSource == TriggerSource::Midi) {
+        volumeLabel.setText("Midi In", juce::dontSendNotification);
+    } else if (triggerSource == TriggerSource::Bpm) {
+        volumeLabel.setText("BPM", juce::dontSendNotification);
+    } else {
+        volumeLabel.setText("Thresh", juce::dontSendNotification);
+    }
+    volumeMeter.setShowDbScale(!specialMode);
+
+    // Audio控制条仅在Audio模式显示
+    const bool showAudioControls = !specialMode;
     levelWindowLabel.setVisible(showAudioControls);
     levelWindowSlider.setVisible(showAudioControls);
     levelWindowValueLabel.setVisible(showAudioControls);
@@ -195,12 +248,33 @@ void SettingsPanel::setMidiMode(bool enabled) {
     inputFilterSlider.setVisible(showAudioControls);
     inputFilterValueLabel.setVisible(showAudioControls);
 
+    // BPM控制条仅在BPM模式显示
+    const bool showBpmControls = (triggerSource == TriggerSource::Bpm);
+    bpmDivisionLabel.setVisible(showBpmControls);
+    bpmDivisionSlider.setVisible(showBpmControls);
+    bpmDivisionValueLabel.setVisible(showBpmControls);
+
     resized();
     repaint();
 }
 
-void SettingsPanel::setMidiModeChangedCallback(std::function<void(bool)> callback) {
-    midiModeChangedCallback = std::move(callback);
+void SettingsPanel::setTriggerSourceChangedCallback(std::function<void(TriggerSource)> callback) {
+    triggerSourceChangedCallback = std::move(callback);
+}
+
+void SettingsPanel::setBpmDivisionIndex(int index) {
+    const int clamped = juce::jlimit(0, tremolo::defaults::bpmDivisionCount - 1, index);
+    bpmDivisionSlider.setValue(clamped, juce::dontSendNotification);
+
+    static constexpr std::array<const char*, tremolo::defaults::bpmDivisionCount> kNames = {
+        "1/1", "1/2", "1/4", "1/8", "1/16", "1/32", "1/64"};
+
+    bpmDivisionValueLabel.setText("Rate " + juce::String{kNames[static_cast<size_t>(clamped)]},
+                                 juce::dontSendNotification);
+}
+
+void SettingsPanel::setBpmDivisionChangedCallback(std::function<void(int)> callback) {
+    bpmDivisionChangedCallback = std::move(callback);
 }
 
 void SettingsPanel::paint(juce::Graphics& g) {
@@ -227,7 +301,9 @@ void SettingsPanel::resized() {
     content.removeFromTop(10);
     volumeMeter.setBounds(content.removeFromTop(160));
 
-    if (!midiModeEnabled) {
+    const bool specialMode = (triggerSource != TriggerSource::Audio);
+
+    if (!specialMode) {
         content.removeFromTop(12);
         levelWindowLabel.setBounds(content.removeFromTop(24));
 
@@ -247,10 +323,21 @@ void SettingsPanel::resized() {
         inputFilterValueLabel.setBounds(content.removeFromTop(20));
     }
 
-    // 底部按钮
+    if (triggerSource == TriggerSource::Bpm) {
+        content.removeFromTop(12);
+        bpmDivisionLabel.setBounds(content.removeFromTop(24));
+
+        content.removeFromTop(6);
+        bpmDivisionSlider.setBounds(content.removeFromTop(28));
+
+        content.removeFromTop(4);
+        bpmDivisionValueLabel.setBounds(content.removeFromTop(20));
+    }
+
+    // 底部按钮（单按钮循环切换）
     content.removeFromTop(14);
     auto bottomRow = content.removeFromBottom(30);
-    midiModeButton.setBounds(bottomRow.withSizeKeepingCentre(160, 28));
+    triggerModeButton.setBounds(bottomRow.withSizeKeepingCentre(220, 28));
 }
 
 void SettingsPanel::setVisible(bool shouldBeVisible) {
@@ -502,10 +589,21 @@ PluginEditor::PluginEditor(PluginProcessor& p)
       p.setTriggerThresholdDb(thresholdDb);
   });
 
-  settingsPanel.setMidiMode(false);
-  auto applyMidiMode = [this, &p](bool enabled) {
-      midiModeEnabled = enabled;
-      p.setMidiModeEnabled(enabled);
+  settingsPanel.setTriggerSource(TriggerSource::Audio);
+
+  settingsPanel.setBpmDivisionIndex(p.getBpmDivisionIndex());
+  settingsPanel.setBpmDivisionChangedCallback([&p](int idx) {
+      p.setBpmDivisionIndex(idx);
+  });
+
+  auto applyTriggerSource = [this, &p](TriggerSource src) {
+      midiModeEnabled = (src == TriggerSource::Midi);
+      bpmModeEnabled = (src == TriggerSource::Bpm);
+
+      p.setMidiModeEnabled(midiModeEnabled);
+      p.setBpmModeEnabled(bpmModeEnabled);
+
+      settingsPanel.setTriggerSource(src);
 
       // 进入/退出模式时重置一次状态，避免跨模式“沿检测”残留
       wasIndicatorFlashing = false;
@@ -513,31 +611,47 @@ PluginEditor::PluginEditor(PluginProcessor& p)
       animationProgress = 0.0f;
       stopHcrFrameAnimation();
 
-      if (midiModeEnabled) {
+      if (src == TriggerSource::Midi) {
           lastMidiTriggerSequence = p.getMidiTriggerSequence();
           midiFlashTimerSec = 0.0;
           midiHistoryPulseFramesRemaining = 0;
 
-          // MIDI模式下，电平图用于显示MIDI输入历史；阈值线不再用于调节音频触发阈值
           settingsPanel.setThresholdChangedCallback({});
           settingsPanel.setThresholdDb(-60.0f);
           settingsPanel.setVolumeMeterMode(true);
-      } else {
-          // 恢复音频阈值调节
-          settingsPanel.setThresholdChangedCallback([&p](float thresholdDb) {
-              p.setTriggerThresholdDb(thresholdDb);
-          });
-          settingsPanel.setThresholdDb(p.getTriggerThresholdDb());
+          return;
       }
+
+      if (src == TriggerSource::Bpm) {
+          lastBpmTriggerSequence = p.getBpmTriggerSequence();
+          bpmFlashTimerSec = 0.0;
+          bpmHistoryPulseFramesRemaining = 0;
+
+          settingsPanel.setThresholdChangedCallback({});
+          settingsPanel.setThresholdDb(-60.0f);
+          settingsPanel.setVolumeMeterMode(true);
+          return;
+      }
+
+      // Audio模式
+      settingsPanel.setThresholdChangedCallback([&p](float thresholdDb) {
+          p.setTriggerThresholdDb(thresholdDb);
+      });
+      settingsPanel.setThresholdDb(p.getTriggerThresholdDb());
   };
 
-  settingsPanel.setMidiModeChangedCallback([applyMidiMode](bool enabled) {
-      applyMidiMode(enabled);
+  settingsPanel.setTriggerSourceChangedCallback([applyTriggerSource](TriggerSource src) {
+      applyTriggerSource(src);
   });
 
-  // 启动时根据宿主持久化状态恢复
-  settingsPanel.setMidiMode(p.getMidiModeEnabled());
-  applyMidiMode(p.getMidiModeEnabled());
+  // 启动时根据宿主持久化状态恢复（BPM优先于MIDI，避免互斥状态冲突）
+  if (p.getBpmModeEnabled()) {
+      applyTriggerSource(TriggerSource::Bpm);
+  } else if (p.getMidiModeEnabled()) {
+      applyTriggerSource(TriggerSource::Midi);
+  } else {
+      applyTriggerSource(TriggerSource::Audio);
+  }
 
   settingsPanel.setLevelCaptureWindowMs(p.getLevelCaptureWindowMs());
   settingsPanel.setLevelCaptureWindowChangedCallback([&p](float windowMs) {
@@ -803,6 +917,30 @@ void PluginEditor::timerCallback() {
     settingsPanel.setLevelCaptureWindowMs(audioProcessor.getLevelCaptureWindowMs());
     settingsPanel.setInputFilterFrequencies(audioProcessor.getInputHighpassHz(),
                                             audioProcessor.getInputLowpassHz());
+
+    // BPM触发模式：指示灯与XY动画由宿主BPM驱动
+    if (bpmModeEnabled) {
+        const auto bpmSeq = audioProcessor.getBpmTriggerSequence();
+        const bool retriggered = (bpmSeq != lastBpmTriggerSequence);
+        if (retriggered) {
+            lastBpmTriggerSequence = bpmSeq;
+            bpmFlashTimerSec = tremolo::defaults::indicatorFlashDurationSecDefault;
+            bpmHistoryPulseFramesRemaining = 3; // 约50ms脉冲，便于在历史图里看清
+        }
+
+        bpmFlashTimerSec = juce::jmax(0.0, bpmFlashTimerSec - dtSec);
+        const bool shouldFlash = bpmFlashTimerSec > 0.0;
+
+        const bool pulse = (bpmHistoryPulseFramesRemaining > 0);
+        settingsPanel.updateVolumeLevel(pulse ? 1.0f : 0.0f);
+        if (bpmHistoryPulseFramesRemaining > 0) {
+            --bpmHistoryPulseFramesRemaining;
+        }
+
+        indicatorLight.setFlashing(retriggered ? false : shouldFlash);
+        updateXYSkinVisualsForIndicator(shouldFlash, retriggered, dtSec);
+        return;
+    }
 
     // MIDI触发模式：指示灯与XY动画由MIDI输入驱动；电平图显示MIDI输入历史
     if (midiModeEnabled) {

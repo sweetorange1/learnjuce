@@ -48,6 +48,17 @@ public:
   void setMidiModeEnabled(bool enabled) noexcept;
   bool getMidiModeEnabled() const noexcept;
 
+  // BPM触发序列号：当BPM节拍到点（按设定音符时值）则递增一次
+  uint64_t getBpmTriggerSequence() const noexcept;
+
+  // BPM触发模式（用于UI：是否用宿主BPM来触发指示灯/动画）
+  void setBpmModeEnabled(bool enabled) noexcept;
+  bool getBpmModeEnabled() const noexcept;
+
+  // BPM触发频率：音符时值索引（0..defaults::bpmDivisionCount-1）
+  void setBpmDivisionIndex(int index) noexcept;
+  int getBpmDivisionIndex() const noexcept;
+
   /**
    *
    * @param bufferToFill
@@ -93,6 +104,16 @@ private:
 
   // UI模式：是否启用MIDI触发（需要持久化到插件状态）
   std::atomic<bool> midiModeEnabled{false};
+
+  // BPM触发：由宿主BPM驱动（需要持久化到插件状态）
+  std::atomic<uint64_t> bpmTriggerSequence{0};
+  std::atomic<bool> bpmModeEnabled{false};
+  std::atomic<int> bpmDivisionIndex{tremolo::defaults::bpmDivisionIndexDefault};
+
+  // BPM节拍边界跟踪（仅音频线程使用，用于避免每个block都触发）
+  bool bpmHasLastStep{false};
+  int64_t bpmLastStepIndex{0};
+  int bpmLastDivisionIndex{tremolo::defaults::bpmDivisionIndexDefault};
 
   std::atomic<float> inputHighpassHz{tremolo::defaults::inputHighpassHz};
   std::atomic<float> inputLowpassHz{tremolo::defaults::inputLowpassHz};

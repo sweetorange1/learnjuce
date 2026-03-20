@@ -46,6 +46,11 @@ inline constexpr float gain = maxGain;
 // 调试显示：是否在界面边缘显示当前“增益倍率”（用于测试映射）
 inline constexpr bool showDebugGainOverlay = false;
 
+// BPM触发模式：默认触发频率（音符时值索引）
+// 0=一分音符, 1=二分音符, 2=四分音符, 3=八分音符, 4=16分音符, 5=32分音符, 6=64分音符
+inline constexpr int bpmDivisionIndexDefault = 2;
+inline constexpr int bpmDivisionCount = 7;
+
 // 设置按钮布局（像素）：固定尺寸 + 左上角偏移
 inline constexpr int settingsButtonWidthPx = 27;
 inline constexpr int settingsButtonHeightPx = 27;

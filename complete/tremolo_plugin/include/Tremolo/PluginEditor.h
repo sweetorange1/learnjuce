@@ -5,6 +5,9 @@
 
 namespace tremolo {
 
+// 触发源：用于指示灯与XY动画（Audio阈值 / MIDI输入 / 宿主BPM）
+enum class TriggerSource : int { Audio = 0, Midi = 1, Bpm = 2 };
+
 // XY控制器组件：用于通过鼠标交互获取X和Y坐标值
 class XYController : public juce::Component {
 public:
@@ -51,11 +54,15 @@ public:
     
     // 更新音量电平
     void updateVolumeLevel(float level);
-    
-    // MIDI触发模式开关（用于把指示灯/XY动画触发器切换到MIDI输入）
-    void setMidiMode(bool enabled);
-    void setMidiModeChangedCallback(std::function<void(bool)> callback);
-    
+
+    // 触发源（通过一个按钮循环切换：Audio -> MIDI -> BPM -> Audio）
+    void setTriggerSource(TriggerSource source);
+    void setTriggerSourceChangedCallback(std::function<void(TriggerSource)> callback);
+
+    // BPM触发频率（音符时值索引）
+    void setBpmDivisionIndex(int index);
+    void setBpmDivisionChangedCallback(std::function<void(int)> callback);
+
     // 设置显示模式
     void setVolumeMeterMode(bool useWaveform);
 
@@ -73,14 +80,21 @@ private:
     void updateInputFilterText(float highpassHz, float lowpassHz);
     void updateLevelWindowText(float windowMs);
 
+    void updateTriggerModeButtonText();
+
     juce::Label titleLabel;
     VolumeMeter volumeMeter; // 音量表组件
     juce::Label volumeLabel; // 音量标签
     juce::ToggleButton waveformToggle; // 波形显示切换按钮
-    
-    juce::TextButton midiModeButton; // switch midi mod
-    bool midiModeEnabled{false};
-    std::function<void(bool)> midiModeChangedCallback;
+
+    juce::TextButton triggerModeButton; // 循环切换触发源
+    TriggerSource triggerSource{TriggerSource::Audio};
+    std::function<void(TriggerSource)> triggerSourceChangedCallback;
+
+    juce::Label bpmDivisionLabel; // BPM触发频率
+    juce::Slider bpmDivisionSlider; // 0..(count-1)
+    juce::Label bpmDivisionValueLabel;
+    std::function<void(int)> bpmDivisionChangedCallback;
 
     juce::Label levelWindowLabel; // 电平捕捉窗口标签
     juce::Slider levelWindowSlider; // 电平捕捉窗口控制条
@@ -135,6 +149,12 @@ class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
   uint64_t lastMidiTriggerSequence{0};
   double midiFlashTimerSec{0.0};
   int midiHistoryPulseFramesRemaining{0};
+
+  // BPM触发模式：指示灯与XY动画由宿主BPM驱动
+  bool bpmModeEnabled{false};
+  uint64_t lastBpmTriggerSequence{0};
+  double bpmFlashTimerSec{0.0};
+  int bpmHistoryPulseFramesRemaining{0};
 
   // HCR皮肤：逐帧动画状态（002->006）
   bool hcrFrameAnimActive{false};
