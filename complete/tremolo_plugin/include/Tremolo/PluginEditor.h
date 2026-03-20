@@ -52,6 +52,10 @@ public:
     // 更新音量电平
     void updateVolumeLevel(float level);
     
+    // MIDI触发模式开关（用于把指示灯/XY动画触发器切换到MIDI输入）
+    void setMidiMode(bool enabled);
+    void setMidiModeChangedCallback(std::function<void(bool)> callback);
+    
     // 设置显示模式
     void setVolumeMeterMode(bool useWaveform);
 
@@ -73,6 +77,10 @@ private:
     VolumeMeter volumeMeter; // 音量表组件
     juce::Label volumeLabel; // 音量标签
     juce::ToggleButton waveformToggle; // 波形显示切换按钮
+    
+    juce::TextButton midiModeButton; // switch midi mod
+    bool midiModeEnabled{false};
+    std::function<void(bool)> midiModeChangedCallback;
 
     juce::Label levelWindowLabel; // 电平捕捉窗口标签
     juce::Slider levelWindowSlider; // 电平捕捉窗口控制条
@@ -92,6 +100,7 @@ class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
 
    void resized() override;
    void paint(juce::Graphics& g) override;
+  void paintOverChildren(juce::Graphics& g) override;
    void timerCallback() override;
 
  private:
@@ -120,6 +129,12 @@ class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
 
   // 指示灯“阈值触发序列号”追踪：用于识别快速连续触发并立刻重播动画
   uint64_t lastIndicatorTriggerSequence{0};
+  
+  // MIDI触发模式：指示灯与XY动画由MIDI输入驱动
+  bool midiModeEnabled{false};
+  uint64_t lastMidiTriggerSequence{0};
+  double midiFlashTimerSec{0.0};
+  int midiHistoryPulseFramesRemaining{0};
 
   // HCR皮肤：逐帧动画状态（002->006）
   bool hcrFrameAnimActive{false};
@@ -151,10 +166,6 @@ class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
   void updateXYSkinVisualsForIndicator(bool shouldFlash, bool retriggered, double dtSec);
   void startHcrFrameAnimation();
   void stopHcrFrameAnimation();
-
-  juce::Label gainLabel{"gain label", "GAIN"}; // 增益标签
-  juce::Slider gainSlider; // 增益控制条
-  juce::SliderParameterAttachment gainAttachment; // 增益参数附件
 
   XYController xyController; // XY控制器组件
   MessageOnClick about;

@@ -27,6 +27,9 @@ public:
     // 设置显示模式（电平条或波形图）
     void setDisplayMode(bool useWaveform);
     
+    // 是否显示左侧dB刻度与网格（MIDI模式下可隐藏）
+    void setShowDbScale(bool shouldShow);
+    
     // 设置峰值保持时间
     void setPeakHoldTime(float seconds);
 
@@ -42,6 +45,9 @@ private:
     
     // 显示模式
     std::atomic<bool> useWaveformDisplay{false}; // 是否使用波形显示
+    
+    // 是否显示左侧dB刻度
+    std::atomic<bool> showDbScale{true};
     
     // 峰值保持时间（秒）
     std::atomic<float> peakHoldDuration{2.0f};   // 峰值保持持续时间

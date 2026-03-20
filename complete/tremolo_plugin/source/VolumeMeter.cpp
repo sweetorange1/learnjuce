@@ -20,7 +20,10 @@ void VolumeMeter::paint(juce::Graphics& g) {
     auto bounds = getLocalBounds().toFloat();
     auto plotBounds = bounds.reduced(8.0f);
     auto meterArea = plotBounds;
-    meterArea.removeFromLeft(34.0f);
+    const bool shouldShowDbScale = showDbScale.load(std::memory_order_relaxed);
+    if (shouldShowDbScale) {
+        meterArea.removeFromLeft(34.0f);
+    }
 
     // 绘制背景
     g.setColour(meterBackground);
@@ -30,16 +33,18 @@ void VolumeMeter::paint(juce::Graphics& g) {
     g.setColour(juce::Colours::white.withAlpha(0.3f));
     g.drawRoundedRectangle(bounds, 5.0f, 1.0f);
 
-    for (const auto db : {0.0f, -12.0f, -24.0f, -36.0f, -48.0f, -60.0f}) {
-        const auto y = thresholdDbToY(db, meterArea);
-        g.setColour(juce::Colours::white.withAlpha(0.12f));
-        g.drawLine(meterArea.getX(), y, meterArea.getRight(), y, 1.0f);
+    if (shouldShowDbScale) {
+        for (const auto db : {0.0f, -12.0f, -24.0f, -36.0f, -48.0f, -60.0f}) {
+            const auto y = thresholdDbToY(db, meterArea);
+            g.setColour(juce::Colours::white.withAlpha(0.12f));
+            g.drawLine(meterArea.getX(), y, meterArea.getRight(), y, 1.0f);
 
-        g.setColour(juce::Colours::white.withAlpha(0.6f));
-        g.setFont(juce::Font(juce::FontOptions{}.withHeight(10.0f)));
-        g.drawText(juce::String(db, 0) + " dB",
-                   juce::Rectangle<float>(plotBounds.getX(), y - 8.0f, 30.0f, 16.0f),
-                   juce::Justification::centredRight, false);
+            g.setColour(juce::Colours::white.withAlpha(0.6f));
+            g.setFont(juce::Font(juce::FontOptions{}.withHeight(10.0f)));
+            g.drawText(juce::String(db, 0) + " dB",
+                       juce::Rectangle<float>(plotBounds.getX(), y - 8.0f, 30.0f, 16.0f),
+                       juce::Justification::centredRight, false);
+        }
     }
 
     if (useWaveformDisplay) {
@@ -175,6 +180,11 @@ void VolumeMeter::setDisplayMode(bool useWaveform) {
     repaint();
 }
 
+void VolumeMeter::setShowDbScale(bool shouldShow) {
+    showDbScale.store(shouldShow, std::memory_order_relaxed);
+    repaint();
+}
+
 void VolumeMeter::setPeakHoldTime(float seconds) {
     peakHoldDuration.store(juce::jlimit(0.1f, 10.0f, seconds));
 }
@@ -212,7 +222,9 @@ float VolumeMeter::yToThresholdDb(float y, juce::Rectangle<float> bounds) const 
 void VolumeMeter::updateThresholdFromY(float y) {
     auto plotBounds = getLocalBounds().toFloat().reduced(8.0f);
     auto meterArea = plotBounds;
-    meterArea.removeFromLeft(34.0f);
+    if (showDbScale.load(std::memory_order_relaxed)) {
+        meterArea.removeFromLeft(34.0f);
+    }
 
     const auto db = yToThresholdDb(y, meterArea);
     setThresholdDb(db);

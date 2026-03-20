@@ -4,17 +4,17 @@ struct SerializableParameters {
   juce::String waveform;
   float x{tremolo::defaults::xyX};
   float y{tremolo::defaults::xyY};
-  float gain{tremolo::defaults::gain};
   float levelCaptureWindowMs{tremolo::defaults::levelCaptureWindowMs};
 
-  static constexpr auto marshallingVersion = 3;
+  // v2/3: 额外包含 gain；v4: 移除 gain（MAX GAIN 改为 Defaults 固定配置）
+  static constexpr auto marshallingVersion = 4;
 
   template <typename Archive, typename T>
   static void serialise(Archive& archive, T& p) {
     using namespace juce;
 
     const auto version = archive.getVersion();
-    if (version != 1 && version != 2 && version != 3) {
+    if (version != 1 && version != 2 && version != 3 && version != 4) {
       return;
     }
 
@@ -30,7 +30,8 @@ struct SerializableParameters {
             named("modulationWaveform", p.waveform));
 
     if (version >= 2) {
-      archive(named("xyX", p.x), named("xyY", p.y), named("gain", p.gain));
+      // v2/3: 还会写入 gain；我们在反序列化时允许旧字段存在，但新版本不再写入。
+      archive(named("xyX", p.x), named("xyY", p.y));
     }
 
     if (version >= 3) {
@@ -45,7 +46,6 @@ SerializableParameters from(const tremolo::Parameters& p) {
       .waveform = p.waveform.getCurrentChoiceName(),
       .x = p.xValue.get(),
       .y = p.yValue.get(),
-      .gain = p.gain.get(),
       .levelCaptureWindowMs = p.levelCaptureWindowMs.get(),
   };
 }
@@ -100,7 +100,6 @@ juce::Result JsonSerializer::deserialize(juce::InputStream& input,
   if (version >= 2) {
     parameters.xValue = parsedParameters->x;
     parameters.yValue = parsedParameters->y;
-    parameters.gain = parsedParameters->gain;
   }
 
   if (version >= 3) {

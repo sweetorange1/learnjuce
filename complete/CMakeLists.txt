@@ -97,7 +97,8 @@ juce_add_plugin(
   IS_SYNTH
     FALSE
   NEEDS_MIDI_INPUT
-    FALSE
+-    FALSE
++    TRUE
   NEEDS_MIDI_OUTPUT
     FALSE
   VST3_AUTO_MANIFEST

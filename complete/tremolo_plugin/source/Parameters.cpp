@@ -53,18 +53,6 @@ juce::AudioParameterFloat& createYValueParameter(
           juce::AudioParameterFloatAttributes{}.withLabel("")));
 }
 
-juce::AudioParameterFloat& createGainParameter(
-    juce::AudioProcessor& processor) {
-  constexpr auto versionHint = 1;
-  return addParameterToProcessor(
-      processor,
-      std::make_unique<juce::AudioParameterFloat>(
-          juce::ParameterID{"gain", versionHint}, "Gain",
-          juce::NormalisableRange<float>{0.1f, 10.0f, 0.1f},
-          tremolo::defaults::gain,
-          juce::AudioParameterFloatAttributes{}.withLabel("x")));
-}
-
 juce::AudioParameterFloat& createLevelCaptureWindowMsParameter(
     juce::AudioProcessor& processor) {
   constexpr auto versionHint = 1;
@@ -87,6 +75,5 @@ Parameters::Parameters(juce::AudioProcessor& processor)
       waveform{createWaveformParameter(processor)},
       xValue{createXValueParameter(processor)},
       yValue{createYValueParameter(processor)},
-      gain{createGainParameter(processor)},
       levelCaptureWindowMs{createLevelCaptureWindowMsParameter(processor)} {}
 }  // namespace tremolo

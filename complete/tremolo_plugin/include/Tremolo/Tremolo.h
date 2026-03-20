@@ -34,17 +34,21 @@ public:
     // 计算到目标点的距离
     const auto distanceToTarget = std::sqrt(std::pow(x - targetX, 2.0f) + std::pow(y - targetY, 2.0f));
 
-    // 将距离映射到增益（maxGain到1.0）
-    gainBoost = juce::jmap(distanceToTarget, 0.0f, std::sqrt(0.5f), maxGain, 1.0f);
+    // === 增益提升（带距离阈值）===
+    // 距离>=阈值：不增益；距离=0：达到最大增益
+    const auto gainThreshold = juce::jmax(0.0001f, tremolo::defaults::gainBoostDistanceThreshold);
+    const auto configuredMaxGain = juce::jmax(1.0f, tremolo::defaults::maxGain);
+
+    if (distanceToTarget >= gainThreshold) {
+      gainBoost = 1.0f;
+    } else {
+      gainBoost = juce::jmap(distanceToTarget, 0.0f, gainThreshold, configuredMaxGain, 1.0f);
+      gainBoost = juce::jlimit(1.0f, configuredMaxGain, gainBoost);
+    }
 
     // 将距离映射到“公式映射湿度”：距离=0 -> 1(全湿)，距离>=阈值 -> 0(全干)
     const auto threshold = juce::jmax(0.0001f, tremolo::defaults::sawWetDistanceThreshold);
     sawWet = juce::jlimit(0.0f, 1.0f, 1.0f - (distanceToTarget / threshold));
-  }
-
-  // 设置最大增益值
-  void setMaxGain(float maxGainValue) noexcept {
-    maxGain = maxGainValue;  // 设置最大增益值
   }
 
   // 设置触发阈值（dB）
@@ -200,7 +204,6 @@ private:
   float xValue = 0.5f;        // 当前X值
   float yValue = 0.4f;        // 当前Y值
   float gainBoost = 1.0f;     // 当前增益值（基于XY位置计算）
-  float maxGain = 4.0f;       // 最大增益值（由控制条设置）
   float sawWet = 0.0f;        // 公式映射湿度（0=全干，1=全湿）
 
   // 信号检测相关参数

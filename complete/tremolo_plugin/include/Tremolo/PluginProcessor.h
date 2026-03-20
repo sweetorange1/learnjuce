@@ -1,5 +1,8 @@
 #pragma once
 
+#include <atomic>
+#include <cstdint>
+
 namespace tremolo {
 class PluginProcessor : public juce::AudioProcessor {
 public:
@@ -37,6 +40,13 @@ public:
   
   // 获取Tremolo实例（用于指示灯控制）
   Tremolo& getTremolo() noexcept { return tremolo; }
+
+  // 获取“MIDI触发序列号”（每当本block里有任何MIDI事件输入时递增一次）
+  uint64_t getMidiTriggerSequence() const noexcept;
+
+  // MIDI触发模式（用于UI：是否用MIDI NoteOn来触发指示灯/动画）
+  void setMidiModeEnabled(bool enabled) noexcept;
+  bool getMidiModeEnabled() const noexcept;
 
   /**
    *
@@ -77,6 +87,13 @@ private:
   std::atomic<float> latestInputLevel{0.0f};
   std::atomic<float> latestWindowedInputPeak{0.0f};
   std::atomic<float> triggerThresholdDb{tremolo::defaults::triggerThresholdDb};
+
+  // MIDI输入触发序列号：每个processBlock只要收到任意MIDI事件就+1
+  std::atomic<uint64_t> midiTriggerSequence{0};
+
+  // UI模式：是否启用MIDI触发（需要持久化到插件状态）
+  std::atomic<bool> midiModeEnabled{false};
+
   std::atomic<float> inputHighpassHz{tremolo::defaults::inputHighpassHz};
   std::atomic<float> inputLowpassHz{tremolo::defaults::inputLowpassHz};
   std::vector<juce::IIRFilter> detectionHighpassFilters;

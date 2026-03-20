@@ -1,4 +1,6 @@
 #include <cmath>
+// 用于序列化/反序列化插件状态（JSON包装层）
+#include <juce_core/juce_core.h>
 
 // 命名空间定义：将插件相关的代码组织在tremolo命名空间中，避免全局命名冲突
 namespace tremolo {
@@ -22,7 +24,8 @@ const juce::String PluginProcessor::getName() const {
 
 // 检查是否接受MIDI输入：返回false表示此插件不处理MIDI消息
 bool PluginProcessor::acceptsMidi() const {
-  return false;
+  // 需要接收宿主发送到插件的MIDI（用于驱动UI指示灯/动画触发器）
+  return true;
 }
 
 // 检查是否产生MIDI输出：返回false表示此插件不生成MIDI消息
@@ -128,8 +131,18 @@ bool PluginProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
 // 主要的音频处理函数，对每个音频块调用：这是插件的核心处理逻辑
 void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                    juce::MidiBuffer& midiMessages) {
-  // 忽略MIDI消息，因为此插件不处理MIDI
-  juce::ignoreUnused(midiMessages);
+  // MIDI输入：只算 NoteOn（在本block里只要出现任意一次 NoteOn 就触发一次）
+  bool hasNoteOn = false;
+  for (const auto metadata : midiMessages) {
+    const auto& msg = metadata.getMessage();
+    if (msg.isNoteOn()) {
+      hasNoteOn = true;
+      break;
+    }
+  }
+  if (hasNoteOn) {
+    midiTriggerSequence.fetch_add(1, std::memory_order_relaxed);
+  }
 
   // ScopedNoDenormals用于禁用非规格化浮点数处理，提高性能
   juce::ScopedNoDenormals noDenormals;
@@ -162,9 +175,6 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     buffer.clear(channelToClear, 0, buffer.getNumSamples());
   }
 
-  // 更新最大增益值
-  tremolo.setMaxGain(parameters.gain.get());
-  
   // 更新XY控制器参数（根据XY位置计算实际增益）
   tremolo.setXYValues(parameters.xValue.get(), parameters.yValue.get());
 
@@ -185,24 +195,62 @@ juce::AudioProcessorEditor* PluginProcessor::createEditor() {
 
 // 保存插件状态到内存块：将参数状态序列化保存
 void PluginProcessor::getStateInformation(juce::MemoryBlock& destData) {
-  // 创建内存输出流用于序列化数据
+  // 兼容旧格式：过去只存 Parameters 的JSON；现在增加UI状态（midiModeEnabled）
+  juce::MemoryBlock parametersBlock;
+  juce::MemoryOutputStream parametersStream{parametersBlock, true};
+  JsonSerializer::serialize(parameters, parametersStream);
+
+  juce::var parametersJson;
+  const auto parsingResult = juce::JSON::parse(parametersStream.toString(), parametersJson);
+
+  juce::DynamicObject::Ptr root{new juce::DynamicObject()};
+  root->setProperty("__state_version__", 1);
+  root->setProperty("parameters", parsingResult.wasOk() ? parametersJson : juce::var{});
+  root->setProperty("midiModeEnabled", midiModeEnabled.load(std::memory_order_relaxed));
+
   juce::MemoryOutputStream outputStream{destData, true};
-  // 使用JSON序列化器保存参数状态
-  JsonSerializer::serialize(parameters, outputStream);
+  juce::JSON::writeToStream(outputStream, juce::var(root.get()),
+                            juce::JSON::FormatOptions{}
+                                .withSpacing(juce::JSON::Spacing::multiLine)
+                                .withMaxDecimalPlaces(2));
 }
 
 // 从内存块加载插件状态：反序列化参数状态
 void PluginProcessor::setStateInformation(const void* data, int sizeInBytes) {
-  // 创建内存输入流读取序列化数据
-  juce::MemoryInputStream inputStream{data, static_cast<size_t>(sizeInBytes),
-                                      false};
-  // 使用JSON序列化器加载参数状态
-  const auto result = JsonSerializer::deserialize(inputStream, parameters);
+  // 新格式：{ parameters: { ...旧Parameters JSON... }, midiModeEnabled: bool }
+  // 旧格式：直接是 Parameters JSON
+  juce::MemoryInputStream inputStream{data, static_cast<size_t>(sizeInBytes), false};
+  const auto raw = inputStream.readEntireStreamAsString();
 
-  // 检查反序列化是否成功
+  juce::var parsed;
+  const auto parseResult = juce::JSON::parse(raw, parsed);
+
+  if (parseResult.wasOk() && parsed.isObject()) {
+    const auto* obj = parsed.getDynamicObject();
+    if (obj != nullptr && obj->hasProperty("parameters")) {
+      // 新格式
+      const auto enabled = static_cast<bool>(obj->getProperty("midiModeEnabled"));
+      midiModeEnabled.store(enabled, std::memory_order_relaxed);
+
+      const auto parametersVar = obj->getProperty("parameters");
+      const auto parametersText = juce::JSON::toString(parametersVar);
+      juce::MemoryInputStream parametersStream{parametersText.toRawUTF8(),
+                                               static_cast<size_t>(parametersText.getNumBytesAsUTF8()),
+                                               false};
+      const auto result = JsonSerializer::deserialize(parametersStream, parameters);
+      if (result.failed()) {
+        DBG(result.getErrorMessage());
+      }
+      return;
+    }
+  }
+
+  // 旧格式回退
+  juce::MemoryInputStream legacyStream{raw.toRawUTF8(),
+                                       static_cast<size_t>(raw.getNumBytesAsUTF8()),
+                                       false};
+  const auto result = JsonSerializer::deserialize(legacyStream, parameters);
   if (result.failed()) {
-    // 通知用户读取参数失败
-    // 目前，我们只是将错误消息写入标准错误流
     DBG(result.getErrorMessage());
   }
 }
@@ -241,6 +289,18 @@ void PluginProcessor::setTriggerThresholdDb(float thresholdDb) noexcept {
 
 float PluginProcessor::getTriggerThresholdDb() const noexcept {
   return triggerThresholdDb.load(std::memory_order_relaxed);
+}
+
+uint64_t PluginProcessor::getMidiTriggerSequence() const noexcept {
+  return midiTriggerSequence.load(std::memory_order_relaxed);
+}
+
+void PluginProcessor::setMidiModeEnabled(bool enabled) noexcept {
+  midiModeEnabled.store(enabled, std::memory_order_relaxed);
+}
+
+bool PluginProcessor::getMidiModeEnabled() const noexcept {
+  return midiModeEnabled.load(std::memory_order_relaxed);
 }
 
 void PluginProcessor::setInputFilterFrequencies(float highpassHz,

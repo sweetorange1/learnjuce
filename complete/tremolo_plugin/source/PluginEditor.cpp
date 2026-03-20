@@ -17,7 +17,39 @@ inline juce::Image loadImageFromBinary(const BinaryImage& img) {
   return juce::ImageCache::getFromMemory(img.data, img.size);
 }
 
+inline float computeGainBoostForXY(float x, float y) {
+  constexpr float targetX = tremolo::defaults::xyTargetX;
+  constexpr float targetY = tremolo::defaults::xyTargetY;
+
+  const auto distanceToTarget = std::sqrt(std::pow(x - targetX, 2.0f) +
+                                          std::pow(y - targetY, 2.0f));
+
+  const auto gainThreshold = juce::jmax(0.0001f, tremolo::defaults::gainBoostDistanceThreshold);
+  const auto configuredMaxGain = juce::jmax(1.0f, tremolo::defaults::maxGain);
+
+  if (distanceToTarget >= gainThreshold) {
+    return 1.0f;
+  }
+
+  auto gainBoost = juce::jmap(static_cast<float>(distanceToTarget),
+                             0.0f, gainThreshold,
+                             configuredMaxGain, 1.0f);
+  return juce::jlimit(1.0f, configuredMaxGain, gainBoost);
+}
+
+inline float computeSawWetForXY(float x, float y) {
+  constexpr float targetX = tremolo::defaults::xyTargetX;
+  constexpr float targetY = tremolo::defaults::xyTargetY;
+
+  const auto distanceToTarget = std::sqrt(std::pow(x - targetX, 2.0f) +
+                                          std::pow(y - targetY, 2.0f));
+
+  const auto threshold = juce::jmax(0.0001f, tremolo::defaults::sawWetDistanceThreshold);
+  return juce::jlimit(0.0f, 1.0f, 1.0f - (static_cast<float>(distanceToTarget) / threshold));
+}
+
 inline tremolo::defaults::XYSkinId nextXYSkin(tremolo::defaults::XYSkinId current) {
+
   const auto& order = tremolo::defaults::xySkinCycleOrder;
   if (order.empty()) {
     return current;
@@ -70,6 +102,22 @@ SettingsPanel::SettingsPanel() {
 
     volumeMeter.setDisplayMode(true);
     addAndMakeVisible(volumeMeter);
+
+    // switch midi mod：切换指示灯/XY动画触发器来源（音频阈值 <-> MIDI输入）
+    midiModeButton.setButtonText("switch midi mod");
+    midiModeButton.setClickingTogglesState(true);
+    // 统一黑灰主题（尽量简单）
+    midiModeButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF1E1E1E));
+    midiModeButton.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xFF303030));
+    midiModeButton.setColour(juce::TextButton::textColourOffId, juce::Colour(0xFFE6E6E6));
+    midiModeButton.setColour(juce::TextButton::textColourOnId, juce::Colour(0xFFE6E6E6));
+    midiModeButton.onClick = [this]() {
+        setMidiMode(midiModeButton.getToggleState());
+        if (midiModeChangedCallback) {
+            midiModeChangedCallback(midiModeEnabled);
+        }
+    };
+    addAndMakeVisible(midiModeButton);
 
     levelWindowLabel.setText("Detail", juce::dontSendNotification);
     levelWindowLabel.setJustificationType(juce::Justification::centredLeft);
@@ -130,6 +178,31 @@ SettingsPanel::SettingsPanel() {
     updateLevelWindowText(tremolo::defaults::levelCaptureWindowMs);
 }
 
+void SettingsPanel::setMidiMode(bool enabled) {
+    midiModeEnabled = enabled;
+    midiModeButton.setToggleState(enabled, juce::dontSendNotification);
+    midiModeButton.setButtonText(enabled ? "switch audio mod" : "switch midi mod");
+
+    // MIDI模式下：隐藏Detail/InputFilter控制条；电平检测标题改为Midi In；左侧dB提示隐藏
+    volumeLabel.setText(enabled ? "Midi In" : "Thresh", juce::dontSendNotification);
+    volumeMeter.setShowDbScale(!enabled);
+
+    const bool showAudioControls = !enabled;
+    levelWindowLabel.setVisible(showAudioControls);
+    levelWindowSlider.setVisible(showAudioControls);
+    levelWindowValueLabel.setVisible(showAudioControls);
+    inputFilterLabel.setVisible(showAudioControls);
+    inputFilterSlider.setVisible(showAudioControls);
+    inputFilterValueLabel.setVisible(showAudioControls);
+
+    resized();
+    repaint();
+}
+
+void SettingsPanel::setMidiModeChangedCallback(std::function<void(bool)> callback) {
+    midiModeChangedCallback = std::move(callback);
+}
+
 void SettingsPanel::paint(juce::Graphics& g) {
     // 绘制设置面板背景（半透明黑色）
     g.setColour(juce::Colour(0xCC000000));
@@ -154,23 +227,30 @@ void SettingsPanel::resized() {
     content.removeFromTop(10);
     volumeMeter.setBounds(content.removeFromTop(160));
 
-    content.removeFromTop(12);
-    levelWindowLabel.setBounds(content.removeFromTop(24));
+    if (!midiModeEnabled) {
+        content.removeFromTop(12);
+        levelWindowLabel.setBounds(content.removeFromTop(24));
 
-    content.removeFromTop(6);
-    levelWindowSlider.setBounds(content.removeFromTop(28));
+        content.removeFromTop(6);
+        levelWindowSlider.setBounds(content.removeFromTop(28));
 
-    content.removeFromTop(4);
-    levelWindowValueLabel.setBounds(content.removeFromTop(20));
+        content.removeFromTop(4);
+        levelWindowValueLabel.setBounds(content.removeFromTop(20));
 
-    content.removeFromTop(12);
-    inputFilterLabel.setBounds(content.removeFromTop(24));
+        content.removeFromTop(12);
+        inputFilterLabel.setBounds(content.removeFromTop(24));
 
-    content.removeFromTop(6);
-    inputFilterSlider.setBounds(content.removeFromTop(28));
+        content.removeFromTop(6);
+        inputFilterSlider.setBounds(content.removeFromTop(28));
 
-    content.removeFromTop(4);
-    inputFilterValueLabel.setBounds(content.removeFromTop(20));
+        content.removeFromTop(4);
+        inputFilterValueLabel.setBounds(content.removeFromTop(20));
+    }
+
+    // 底部按钮
+    content.removeFromTop(14);
+    auto bottomRow = content.removeFromBottom(30);
+    midiModeButton.setBounds(bottomRow.withSizeKeepingCentre(160, 28));
 }
 
 void SettingsPanel::setVisible(bool shouldBeVisible) {
@@ -315,8 +395,6 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     // 初始化列表：C++中用于初始化成员变量的高效方式
     // AudioProcessorEditor(&p)：调用基类构造函数，传入音频处理器指针
     : AudioProcessorEditor(&p),
-      // gainAttachment：将增益参数与控制条绑定
-      gainAttachment{p.getParameterRefs().gain, gainSlider},
       // about：关于信息组件，显示插件信息
       about{*this, logo,
             // 字符串拼接：使用预定义宏组合插件信息
@@ -424,6 +502,43 @@ PluginEditor::PluginEditor(PluginProcessor& p)
       p.setTriggerThresholdDb(thresholdDb);
   });
 
+  settingsPanel.setMidiMode(false);
+  auto applyMidiMode = [this, &p](bool enabled) {
+      midiModeEnabled = enabled;
+      p.setMidiModeEnabled(enabled);
+
+      // 进入/退出模式时重置一次状态，避免跨模式“沿检测”残留
+      wasIndicatorFlashing = false;
+      isAnimating = false;
+      animationProgress = 0.0f;
+      stopHcrFrameAnimation();
+
+      if (midiModeEnabled) {
+          lastMidiTriggerSequence = p.getMidiTriggerSequence();
+          midiFlashTimerSec = 0.0;
+          midiHistoryPulseFramesRemaining = 0;
+
+          // MIDI模式下，电平图用于显示MIDI输入历史；阈值线不再用于调节音频触发阈值
+          settingsPanel.setThresholdChangedCallback({});
+          settingsPanel.setThresholdDb(-60.0f);
+          settingsPanel.setVolumeMeterMode(true);
+      } else {
+          // 恢复音频阈值调节
+          settingsPanel.setThresholdChangedCallback([&p](float thresholdDb) {
+              p.setTriggerThresholdDb(thresholdDb);
+          });
+          settingsPanel.setThresholdDb(p.getTriggerThresholdDb());
+      }
+  };
+
+  settingsPanel.setMidiModeChangedCallback([applyMidiMode](bool enabled) {
+      applyMidiMode(enabled);
+  });
+
+  // 启动时根据宿主持久化状态恢复
+  settingsPanel.setMidiMode(p.getMidiModeEnabled());
+  applyMidiMode(p.getMidiModeEnabled());
+
   settingsPanel.setLevelCaptureWindowMs(p.getLevelCaptureWindowMs());
   settingsPanel.setLevelCaptureWindowChangedCallback([&p](float windowMs) {
       p.setLevelCaptureWindowMs(windowMs);
@@ -460,20 +575,6 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   // 定义侧边标签的字体颜色：使用JUCE的颜色系统（字的颜色）
   const auto sideFontColor = juce::Colour{0xFFC8C8C8};
 
-  // 设置增益标签
-  gainLabel.setJustificationType(juce::Justification::centred);
-  gainLabel.setMinimumHorizontalScale(1.f);
-  gainLabel.setFont(juce::Font(juce::FontOptions{}.withHeight(14.0f)));
-  gainLabel.setColour(juce::Label::textColourId, sideFontColor);
-  gainLabel.setText("MAX GAIN", juce::dontSendNotification); // 明确表示是最大增益
-  addAndMakeVisible(gainLabel);
-
-  // 设置增益控制条
-  gainSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  gainSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
-  gainSlider.setRange(0.1, 10.0, 0.1); // 增益范围从0.1到10.0，步进0.1
-  addAndMakeVisible(gainSlider);
-
   // // 设置指示灯标签
   // indicatorLabel.setJustificationType(juce::Justification::centred);
   // indicatorLabel.setMinimumHorizontalScale(1.f);
@@ -482,13 +583,15 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   // indicatorLabel.setText("PEAK", juce::dontSendNotification);
   // addAndMakeVisible(indicatorLabel);
 
-  // 绑定增益参数（在成员初始化列表中初始化）
-
   // 设置XY控制器的值变化回调函数
-  xyController.setValueChangeCallback([&p](float x, float y) {
+  xyController.setValueChangeCallback([this, &p](float x, float y) {
     // 更新音频处理器的X和Y参数值
     p.getParameterRefs().xValue.setValueNotifyingHost(x);
     p.getParameterRefs().yValue.setValueNotifyingHost(y);
+
+    if constexpr (tremolo::defaults::showDebugGainOverlay) {
+      repaint();
+    }
   });
 
   // 从处理器参数同步一次XY控制器初始位置（支持宿主恢复状态）
@@ -667,6 +770,10 @@ void PluginEditor::timerCallback() {
     if (!juce::approximatelyEqual(xParam, xyController.getXValue()) ||
         !juce::approximatelyEqual(yParam, xyController.getYValue())) {
         xyController.setValues(xParam, yParam, false);
+
+        if constexpr (tremolo::defaults::showDebugGainOverlay) {
+          repaint();
+        }
     }
 
     // 根据XY控制器数值刷新tone控制点位置
@@ -691,6 +798,36 @@ void PluginEditor::timerCallback() {
     }
     
     constexpr double dtSec = 1.0 / 60.0;
+
+    // 将一些参数实时推送给设置面板（无论哪种模式都需要同步这些UI）
+    settingsPanel.setLevelCaptureWindowMs(audioProcessor.getLevelCaptureWindowMs());
+    settingsPanel.setInputFilterFrequencies(audioProcessor.getInputHighpassHz(),
+                                            audioProcessor.getInputLowpassHz());
+
+    // MIDI触发模式：指示灯与XY动画由MIDI输入驱动；电平图显示MIDI输入历史
+    if (midiModeEnabled) {
+        const auto midiSeq = audioProcessor.getMidiTriggerSequence();
+        const bool retriggered = (midiSeq != lastMidiTriggerSequence);
+        if (retriggered) {
+            lastMidiTriggerSequence = midiSeq;
+            midiFlashTimerSec = tremolo::defaults::indicatorFlashDurationSecDefault;
+            midiHistoryPulseFramesRemaining = 3; // 约50ms脉冲，便于在历史图里看清
+        }
+
+        midiFlashTimerSec = juce::jmax(0.0, midiFlashTimerSec - dtSec);
+        const bool shouldFlash = midiFlashTimerSec > 0.0;
+
+        // 电平历史：用0/1脉冲表示“本帧附近是否有MIDI进入”
+        const bool pulse = (midiHistoryPulseFramesRemaining > 0);
+        settingsPanel.updateVolumeLevel(pulse ? 1.0f : 0.0f);
+        if (midiHistoryPulseFramesRemaining > 0) {
+            --midiHistoryPulseFramesRemaining;
+        }
+
+        indicatorLight.setFlashing(retriggered ? false : shouldFlash);
+        updateXYSkinVisualsForIndicator(shouldFlash, retriggered, dtSec);
+        return;
+    }
 
     // 更新指示灯状态：传入时间增量（1/60秒）
     // 指示灯根据音频信号的峰值决定是否闪烁
@@ -728,8 +865,40 @@ void PluginEditor::paint(juce::Graphics& g) {
     AudioProcessorEditor::paint(g);
 }
 
+void PluginEditor::paintOverChildren(juce::Graphics& g) {
+    if constexpr (!tremolo::defaults::showDebugGainOverlay) {
+        return;
+    }
+
+    auto& audioProcessor = dynamic_cast<PluginProcessor&>(processor);
+    const float x = audioProcessor.getParameterRefs().xValue.get();
+    const float y = audioProcessor.getParameterRefs().yValue.get();
+    const float gainBoost = computeGainBoostForXY(x, y);
+    const float sawWet = computeSawWetForXY(x, y);
+
+    const auto gainText = juce::String{"GAIN x"} + juce::String{gainBoost, 2};
+    const auto wetText = juce::String{"WET "} + juce::String{sawWet * 100.0f, 1} + "%";
+
+    auto area = getLocalBounds().toFloat().reduced(8.0f);
+    auto box = area.removeFromTop(44.0f).removeFromRight(140.0f);
+
+    g.setColour(juce::Colours::black.withAlpha(0.55f));
+    g.fillRoundedRectangle(box, 6.0f);
+
+    g.setColour(juce::Colours::white.withAlpha(0.9f));
+    g.setFont(juce::Font(13.0f, juce::Font::bold));
+
+    auto line1 = box;
+    auto line2 = line1.removeFromBottom(line1.getHeight() * 0.5f);
+    line1 = line1.removeFromTop(line1.getHeight());
+
+    g.drawFittedText(gainText, line1.toNearestInt(), juce::Justification::centred, 1);
+    g.drawFittedText(wetText, line2.toNearestInt(), juce::Justification::centred, 1);
+}
+
 // resized方法：当组件大小改变时自动调用，用于重新布局子组件
 void PluginEditor::resized() {
+
   // 获取组件的本地边界（相对于父组件的坐标和大小）
   auto bounds = getLocalBounds();
 

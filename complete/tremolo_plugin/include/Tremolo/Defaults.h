@@ -34,6 +34,18 @@ inline constexpr float sawMapC = 0.2f;
 // XY 到“公式映射湿度”的距离阈值：距离>=阈值为纯干声；距离=0为纯湿声
 inline constexpr float sawWetDistanceThreshold = 0.25f;
 
+// XY 到“增益提升”的距离阈值：距离>=阈值则不进行任何增益（gainBoost=1.0）
+// 提示：0.70710678 约等于 sqrt(0.5)，可覆盖大部分区域；你可以根据手感调小让“增益甜区”更集中。
+inline constexpr float gainBoostDistanceThreshold = 0.5;
+
+// 最大增益提升倍率（原 MAX GAIN 滑条已移除，改为固定配置）
+inline constexpr float maxGain = 6.0f;
+// 兼容旧命名（过去该值通过"gain"参数暴露给宿主）
+inline constexpr float gain = maxGain;
+
+// 调试显示：是否在界面边缘显示当前“增益倍率”（用于测试映射）
+inline constexpr bool showDebugGainOverlay = false;
+
 // 设置按钮布局（像素）：固定尺寸 + 左上角偏移
 inline constexpr int settingsButtonWidthPx = 27;
 inline constexpr int settingsButtonHeightPx = 27;
@@ -70,8 +82,6 @@ inline constexpr int indicatorLightWidthPx = 20;
 inline constexpr int indicatorLightHeightPx = 20;
 inline constexpr int indicatorLightLeftPx = 552;
 inline constexpr int indicatorLightTopPx = 10;
-
-inline constexpr float gain = 6.0f;
 
 // 电平捕捉窗口（毫秒）
 inline constexpr float levelCaptureWindowMs = 60.0f;
