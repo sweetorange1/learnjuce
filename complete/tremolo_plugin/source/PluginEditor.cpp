@@ -2,8 +2,50 @@
 #include "../include/Tremolo/Defaults.h"
 #include <TremoloPluginAssets.h>
 
+#include <array>
+
 // tremolo命名空间：C++中使用命名空间来组织代码，避免命名冲突
 namespace tremolo {
+
+namespace {
+struct BinaryImage {
+  const char* data{};
+  int size{};
+};
+
+inline juce::Image loadImageFromBinary(const BinaryImage& img) {
+  return juce::ImageCache::getFromMemory(img.data, img.size);
+}
+
+inline tremolo::defaults::XYSkinId nextXYSkin(tremolo::defaults::XYSkinId current) {
+  const auto& order = tremolo::defaults::xySkinCycleOrder;
+  if (order.empty()) {
+    return current;
+  }
+
+  for (size_t i = 0; i < order.size(); ++i) {
+    if (order[i] == current) {
+      return order[(i + 1) % order.size()];
+    }
+  }
+  return order[0];
+}
+
+const BinaryImage kBtBase{assets::bt_png, assets::bt_pngSize};
+const BinaryImage kBtJj{assets::jj_png, assets::jj_pngSize};
+const BinaryImage kBtTone{assets::tone_png, assets::tone_pngSize};
+
+// HCR：001为底图；002-006为指示灯闪烁时的逐帧动画
+const BinaryImage kHcrBase{assets::_001_png, assets::_001_pngSize};
+const std::array<BinaryImage, 5> kHcrFlashFrames{{
+    {assets::_002_png, assets::_002_pngSize},
+    {assets::_003_png, assets::_003_pngSize},
+    {assets::_004_png, assets::_004_pngSize},
+    {assets::_005_png, assets::_005_pngSize},
+    {assets::_006_png, assets::_006_pngSize},
+}};
+const BinaryImage kHcrTone{assets::tone_png2, assets::tone_png2Size};
+}  // namespace
 
 // SettingsPanel类的实现
 SettingsPanel::SettingsPanel() {
@@ -198,10 +240,6 @@ void SettingsPanel::updateLevelWindowText(float windowMs) {
 XYController::XYController() {
     // 设置XY控制器可以接收鼠标事件
     setInterceptsMouseClicks(true, true);
-
-    // 加载控制点图片（tone.png）：从内存资源读取
-    toneMarkerImage = juce::ImageCache::getFromMemory(assets::tone_png,
-                                                      assets::tone_pngSize);
 }
 
 // 鼠标按下事件处理
@@ -265,94 +303,9 @@ void XYController::updatePosition(juce::Point<float> position) {
 
 // 绘制XY控制器
 void XYController::paint(juce::Graphics& g) {
-    // 获取组件边界
-    auto bounds = getLocalBounds().toFloat();
-    
-    // 绘制背景（浅灰色网格）
-    g.setColour(juce::Colour(0x00000000));
-    g.fillRect(bounds);
-    
-    // // 绘制网格线
-    // g.setColour(juce::Colour(0xFF555555));
-    //
-    // // 水平网格线
-    // for (int i = 1; i < 4; ++i) {
-    //     float y = bounds.getHeight() * i / 4.0f;
-    //     g.drawLine(0.0f, y, bounds.getWidth(), y, 1.0f);
-    // }
-    //
-    // // 垂直网格线
-    // for (int i = 1; i < 4; ++i) {
-    //     float x = bounds.getWidth() * i / 4.0f;
-    //     g.drawLine(x, 0.0f, x, bounds.getHeight(), 1.0f);
-    // }
-    //
-    // 绘制边框
-    g.setColour(juce::Colour(0xFF888888));
-    g.drawRect(bounds, 2.0f);
-    
-    // 目标点坐标（与 Defaults.h 中保持一致）
-    constexpr float targetX = tremolo::defaults::xyTargetX;
-    constexpr float targetY = tremolo::defaults::xyTargetY;
-    
-    // 绘制目标点标记（绿色十字）
-    float targetXPos = targetX * bounds.getWidth();
-    float targetYPos = targetY * bounds.getHeight();
-    g.setColour(juce::Colour(0xFF9A9A9A));
-    g.drawLine(targetXPos - 8.0f, targetYPos, targetXPos + 8.0f, targetYPos, 2.0f);
-    g.drawLine(targetXPos, targetYPos - 8.0f, targetXPos, targetYPos + 8.0f, 2.0f);
-    
-    // 计算当前位置（以控制点图片中心点作为坐标）
-    const float halfW = tremolo::defaults::xyToneMarkerWidthPx * 0.5f;
-    const float halfH = tremolo::defaults::xyToneMarkerHeightPx * 0.5f;
-
-    const float minX = bounds.getX() + halfW;
-    const float maxX = bounds.getRight() - halfW;
-    const float minY = bounds.getY() + halfH;
-    const float maxY = bounds.getBottom() - halfH;
-
-    const float xPos = minX + xValue * juce::jmax(1.0f, maxX - minX);
-    const float yPos = minY + yValue * juce::jmax(1.0f, maxY - minY);
-
-    // 绘制当前位置指示器（tone.png）
-    const auto markerBounds = juce::Rectangle<float>{
-        xPos - halfW,
-        yPos - halfH,
-        static_cast<float>(tremolo::defaults::xyToneMarkerWidthPx),
-        static_cast<float>(tremolo::defaults::xyToneMarkerHeightPx)};
-
-    if (toneMarkerImage.isValid()) {
-        g.drawImageWithin(toneMarkerImage,
-                          static_cast<int>(markerBounds.getX()),
-                          static_cast<int>(markerBounds.getY()),
-                          static_cast<int>(markerBounds.getWidth()),
-                          static_cast<int>(markerBounds.getHeight()),
-                          juce::RectanglePlacement::stretchToFit);
-    } else {
-        // fallback：图片没加载到时，用灰色圆点兜底
-        g.setColour(juce::Colour(0xFFE6E6E6));
-        g.fillEllipse(markerBounds);
-        g.setColour(juce::Colours::black);
-        g.drawEllipse(markerBounds, 2.0f);
-    }
-
-    
-    // 计算距离和增益信息
-    const auto distanceToTarget = std::sqrt(std::pow(xValue - targetX, 2.0f) + std::pow(yValue - targetY, 2.0f));
-    const auto gainBoost = juce::jmap(distanceToTarget, 0.0f, std::sqrt(0.5f), 4.0f, 1.0f);
-    
-    // 在右下角显示X和Y值以及增益信息
-    juce::String valueText = juce::String("X: ") + juce::String(xValue, 2) + 
-                            juce::String(" Y: ") + juce::String(yValue, 2) +
-                            juce::String("\nGain: ") + juce::String(gainBoost, 2) + "x";
-    
-    // 设置字体和颜色
-    g.setFont(juce::Font(juce::FontOptions{}.withHeight(14.0f)));
-    g.setColour(juce::Colour(0xFFE6E6E6));
-    
-    // 计算文本位置（右下角，留出边距）
-    auto textBounds = bounds.withTrimmedRight(10).withTrimmedBottom(10);
-    g.drawText(valueText, textBounds, juce::Justification::bottomRight, true);
+    // 视觉由外部组件（bt.png / jj.png / tone.png）负责渲染。
+    // 这里保持透明，仅用于鼠标交互与坐标计算。
+    juce::ignoreUnused(g);
 }
 
 // PluginEditor类的构造函数：这是创建插件编辑器界面的入口点
@@ -362,8 +315,6 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     // 初始化列表：C++中用于初始化成员变量的高效方式
     // AudioProcessorEditor(&p)：调用基类构造函数，传入音频处理器指针
     : AudioProcessorEditor(&p),
-      // bypassAttachment：将旁路参数与按钮绑定
-      bypassAttachment{p.getParameterRefs().bypassed, bypassButton},
       // gainAttachment：将增益参数与控制条绑定
       gainAttachment{p.getParameterRefs().gain, gainSlider},
       // about：关于信息组件，显示插件信息
@@ -388,17 +339,7 @@ PluginEditor::PluginEditor(PluginProcessor& p)
       setSize(700, 700);
   }
 
-  // 设置jj.png图片：从内存中加载jj图片资源（BinaryData），避免依赖开发机磁盘路径
-  const auto jjImg = juce::ImageCache::getFromMemory(assets::jj_png, assets::jj_pngSize);
-  if (jjImg.isValid()) {
-      jjImage.setImage(jjImg);
-  }
-  // 在第一次指示灯亮起前，将jj图片设置为隐藏状态
-  jjImage.setVisible(false);
-  // 将jj图片组件添加到界面
-  addAndMakeVisible(jjImage);
-
-  // 设置设置按钮：从内存中加载设置图标（BinaryData），避免依赖开发机磁盘路径
+  // 设置按钮：从内存中加载设置图标（BinaryData），避免依赖开发机磁盘路径
   const auto settingsIcon = juce::ImageCache::getFromMemory(assets::setting_png, assets::setting_pngSize);
   if (settingsIcon.isValid()) {
       settingsButton.setImages(false, true, true,
@@ -427,6 +368,54 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   };
   // 将设置按钮添加到界面
   addAndMakeVisible(settingsButton);
+
+  // skins按钮：用于切换XY控制器皮肤
+  skinsButton.setButtonText("Skins");
+  // 统一黑灰主题（尽量简单，避免默认主题色）
+  skinsButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF1E1E1E));
+  skinsButton.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xFF303030));
+  skinsButton.setColour(juce::TextButton::textColourOffId, juce::Colour(0xFFE6E6E6));
+  skinsButton.setColour(juce::TextButton::textColourOnId, juce::Colour(0xFFE6E6E6));
+  skinsButton.onClick = [this]() {
+      setXYSkin(nextXYSkin(currentXYSkin));
+  };
+  addAndMakeVisible(skinsButton);
+
+  // 设置指示灯组件
+  indicatorLight.setInterceptsMouseClicks(false, false); // 不接收鼠标事件
+  addAndMakeVisible(indicatorLight);
+
+  // XY 区域容器：内部包含bt底图、jj动画、tone控制点和透明交互层
+  xyContainer.setInterceptsMouseClicks(false, true);
+  addAndMakeVisible(xyContainer);
+
+  // bt.png：XY控制器底图（具体内容由皮肤系统决定）
+  btImage.setInterceptsMouseClicks(false, false);
+  xyContainer.addAndMakeVisible(btImage);
+
+  // jj.png：动画图（放在裁剪容器里，越界自动裁剪）。注意：某些皮肤会禁用该动画。
+  jjImage.setInterceptsMouseClicks(false, false);
+  jjImage.setVisible(true); // 默认显示（动画未触发时保持静止）
+
+  jjClipper.setInterceptsMouseClicks(false, false);
+  xyContainer.addAndMakeVisible(jjClipper);
+  jjClipper.addAndMakeVisible(jjImage);
+
+  // tone.png：XY控制点（独立组件，绘制在最上层；不同皮肤可使用不同图片）
+  toneImage.setInterceptsMouseClicks(false, false);
+  xyContainer.addAndMakeVisible(toneImage);
+
+  // 透明交互层（XYController）：仅处理鼠标，不负责绘制
+  xyContainer.addAndMakeVisible(xyController);
+
+  // XY内部层级：bt(底) -> jj(中) -> tone(上) -> xyController(最上用于接收鼠标)
+  btImage.toBack();
+  jjClipper.toFront(false);
+  toneImage.toFront(false);
+  xyController.toFront(false);
+
+  // 启动时应用默认皮肤（来自Defaults配置），避免必须点击skins按钮才加载XY资源
+  setXYSkin(tremolo::defaults::xyDefaultSkin);
 
   // 初始化设置面板
   settingsPanel.setVisible(false); // 初始状态为隐藏
@@ -471,28 +460,6 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   // 定义侧边标签的字体颜色：使用JUCE的颜色系统（字的颜色）
   const auto sideFontColor = juce::Colour{0xFFC8C8C8};
 
-  // 设置旁路标签的对齐方式为左对齐
-  // bypassLabel.setJustificationType(juce::Justification::left);
-  // 设置最小水平缩放比例
-  // bypassLabel.setMinimumHorizontalScale(1.f);
-  // 设置旁路标签的字体
-  // bypassLabel.setFont(lookAndFeel.getSideLabelsFont());
-  // 设置旁路标签的文本颜色
-  // bypassLabel.setColour(juce::Label::textColourId, sideFontColor);
-  // 将旁路标签添加到界面
-  // addAndMakeVisible(bypassLabel);
-
-  // 设置旁路按钮的点击事件处理函数（使用lambda表达式）
-  bypassButton.onClick = [this]() {
-    // 根据按钮的切换状态设置按钮文本
-    bypassButton.setButtonText(bypassButton.getToggleState() ? "Bypassed"
-                                                             : "Off");
-  };
-  // 立即执行一次点击事件，确保初始状态正确
-  bypassButton.onClick();
-  // 将旁路按钮添加到界面
-  // addAndMakeVisible(bypassButton);
-
   // 设置增益标签
   gainLabel.setJustificationType(juce::Justification::centred);
   gainLabel.setMinimumHorizontalScale(1.f);
@@ -515,10 +482,6 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   // indicatorLabel.setText("PEAK", juce::dontSendNotification);
   // addAndMakeVisible(indicatorLabel);
 
-  // 设置指示灯组件
-  indicatorLight.setInterceptsMouseClicks(false, false); // 不接收鼠标事件
-  addAndMakeVisible(indicatorLight);
-
   // 绑定增益参数（在成员初始化列表中初始化）
 
   // 设置XY控制器的值变化回调函数
@@ -532,9 +495,6 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   xyController.setValues(p.getParameterRefs().xValue.get(),
                          p.getParameterRefs().yValue.get(),
                          false);
-  
-  // 将XY控制器添加到界面
-  addAndMakeVisible(xyController);
 
   // 启动定时器用于更新指示灯状态（每秒30帧）
   startTimerHz(60);
@@ -553,6 +513,146 @@ PluginEditor::~PluginEditor() {
   setLookAndFeel(nullptr);
 }
 
+void PluginEditor::setXYSkin(tremolo::defaults::XYSkinId newSkin) {
+    // 第一次进入必须执行资源绑定；之后如果皮肤相同可早退
+    if (xySkinInitialized && currentXYSkin == newSkin) {
+        return;
+    }
+
+    currentXYSkin = newSkin;
+    xySkinInitialized = true;
+
+    // 切换皮肤时，停止所有皮肤相关动画，避免状态串台
+    isAnimating = false;
+    animationProgress = 0.0f;
+    stopHcrFrameAnimation();
+
+    // 统一恢复到“未闪烁”状态的基础底图
+    if (currentXYSkin == tremolo::defaults::XYSkinId::BT) {
+        const auto base = loadImageFromBinary(kBtBase);
+        if (base.isValid()) {
+            btImage.setImage(base);
+        }
+
+        const auto jj = loadImageFromBinary(kBtJj);
+        if (jj.isValid()) {
+            jjImage.setImage(jj);
+        }
+        jjClipper.setVisible(true);
+        jjImage.setVisible(true);
+
+        const auto tone = loadImageFromBinary(kBtTone);
+        if (tone.isValid()) {
+            toneImage.setImage(tone);
+        }
+    } else {
+        const auto base = loadImageFromBinary(kHcrBase);
+        if (base.isValid()) {
+            btImage.setImage(base);
+        }
+
+        // HCR皮肤不使用jj上下往复动画
+        jjImage.setVisible(false);
+        jjClipper.setVisible(false);
+
+        const auto tone = loadImageFromBinary(kHcrTone);
+        if (tone.isValid()) {
+            toneImage.setImage(tone);
+        }
+    }
+
+    // 强制刷新布局与绘制
+    resized();
+    repaint();
+}
+
+void PluginEditor::startHcrFrameAnimation() {
+    hcrFrameAnimActive = true;
+    hcrFrameIndex = 0;
+    hcrFrameTimeAccSec = 0.0;
+
+    const auto frame = loadImageFromBinary(kHcrFlashFrames[0]);
+    if (frame.isValid()) {
+        btImage.setImage(frame);
+    }
+}
+
+void PluginEditor::stopHcrFrameAnimation() {
+    hcrFrameAnimActive = false;
+    hcrFrameIndex = 0;
+    hcrFrameTimeAccSec = 0.0;
+}
+
+void PluginEditor::updateXYSkinVisualsForIndicator(bool shouldFlash, double dtSec) {
+    // 边沿检测：只在“本次闪烁开始”触发一次
+    const bool risingEdge = shouldFlash && !wasIndicatorFlashing;
+    wasIndicatorFlashing = shouldFlash;
+
+    if (currentXYSkin == tremolo::defaults::XYSkinId::BT) {
+        // BT：使用jj.png上下往复动画
+        if (shouldFlash && !isAnimating) {
+            auto& audioProcessor = dynamic_cast<PluginProcessor&>(processor);
+
+            isAnimating = true;
+            isMovingUp = true;
+            animationProgress = 0.0f;
+
+            float indicatorDuration = audioProcessor.getTremolo().getIndicatorDuration();
+            animationDuration = indicatorDuration / 2.0f;
+
+            startYPosition = tremolo::defaults::jjAnimationStartYOffsetPx;
+            targetYPosition = tremolo::defaults::jjAnimationPeakYOffsetPx;
+
+            const auto baseBounds = xyContainer.getLocalBounds()
+                                       .withSizeKeepingCentre(
+                                           juce::jmax(1, juce::roundToInt(51.0f * tremolo::defaults::jjImageScale)),
+                                           juce::jmax(1, juce::roundToInt(325.0f * tremolo::defaults::jjImageScale)))
+                                       .translated(0, 200);
+            jjImage.setBounds(baseBounds.translated(
+                0, -static_cast<int>(tremolo::defaults::jjAnimationStartYOffsetPx)));
+        }
+
+        updateAnimation();
+        return;
+    }
+
+    // HCR：底图001，闪烁时按帧率顺序显示002..006
+    if (risingEdge) {
+        startHcrFrameAnimation();
+    }
+
+    if (!shouldFlash) {
+        // 闪烁结束：恢复到底图001
+        if (hcrFrameAnimActive) {
+            const auto base = loadImageFromBinary(kHcrBase);
+            if (base.isValid()) {
+                btImage.setImage(base);
+            }
+            stopHcrFrameAnimation();
+        }
+        return;
+    }
+
+    if (!hcrFrameAnimActive) {
+        return;
+    }
+
+    const auto fps = juce::jmax(1.0, static_cast<double>(tremolo::defaults::hcrIndicatorAnimFps));
+    const double frameDuration = 1.0 / fps;
+    hcrFrameTimeAccSec += dtSec;
+
+    // 一次闪烁只播放一轮（002->006），播完后停在最后一帧
+    while (hcrFrameTimeAccSec >= frameDuration && hcrFrameIndex < static_cast<int>(kHcrFlashFrames.size()) - 1) {
+        hcrFrameTimeAccSec -= frameDuration;
+        ++hcrFrameIndex;
+
+        const auto frame = loadImageFromBinary(kHcrFlashFrames[static_cast<size_t>(hcrFrameIndex)]);
+        if (frame.isValid()) {
+            btImage.setImage(frame);
+        }
+    }
+}
+
 // timerCallback方法：定时器回调函数，每秒调用30次（30fps）
 // 功能：更新指示灯状态、检测动画触发条件、管理动画生命周期
 // 调用机制：由JUCE框架自动调用，频率由startTimerHz(30)设置
@@ -567,6 +667,27 @@ void PluginEditor::timerCallback() {
     if (!juce::approximatelyEqual(xParam, xyController.getXValue()) ||
         !juce::approximatelyEqual(yParam, xyController.getYValue())) {
         xyController.setValues(xParam, yParam, false);
+    }
+
+    // 根据XY控制器数值刷新tone控制点位置
+    {
+        const auto area = xyContainer.getLocalBounds().toFloat();
+        const float halfW = tremolo::defaults::xyToneMarkerWidthPx * 0.5f;
+        const float halfH = tremolo::defaults::xyToneMarkerHeightPx * 0.5f;
+
+        const float minX = area.getX() + halfW;
+        const float maxX = area.getRight() - halfW;
+        const float minY = area.getY() + halfH;
+        const float maxY = area.getBottom() - halfH;
+
+        const float xPos = minX + xyController.getXValue() * juce::jmax(1.0f, maxX - minX);
+        const float yPos = minY + xyController.getYValue() * juce::jmax(1.0f, maxY - minY);
+
+        toneImage.setBounds(juce::Rectangle<int>{
+            static_cast<int>(std::round(xPos - halfW)),
+            static_cast<int>(std::round(yPos - halfH)),
+            tremolo::defaults::xyToneMarkerWidthPx,
+            tremolo::defaults::xyToneMarkerHeightPx});
     }
     
     // 更新指示灯状态：传入时间增量（1/60秒）
@@ -586,43 +707,8 @@ void PluginEditor::timerCallback() {
     // 设置指示灯组件的闪烁状态
     indicatorLight.setFlashing(shouldFlash);
     
-  // 动画触发逻辑：当指示灯亮起且当前没有动画运行时，开始新动画
-  if (shouldFlash && !isAnimating) {
-      // 如果是第一次指示灯亮起，显示图片并重置状态
-      if (isFirstIndicatorFlash) {
-          jjImage.setVisible(true); // 显示图片
-          isFirstIndicatorFlash = false; // 标记为已显示过
-      }
-      
-      // 设置动画状态标志
-      isAnimating = true;
-      isMovingUp = true; // 初始运动方向：向上
-      animationProgress = 0.0f; // 重置动画进度
-      
-      // 计算动画持续时间：单程运动时间是指示灯亮起时间的一半
-      // 这样确保动画在指示灯熄灭前完成往返运动
-      float indicatorDuration = audioProcessor.getTremolo().getIndicatorDuration();
-      animationDuration = indicatorDuration / 2.0f;
-      
-      // 确保每次动画都从正确的初始位置开始
-      // 获取当前的基础边界，确保初始位置计算准确
-      auto bounds = getLocalBounds();
-const auto jjW = juce::jmax(1, juce::roundToInt(51.0f * tremolo::defaults::jjImageScale));
-const auto jjH = juce::jmax(1, juce::roundToInt(325.0f * tremolo::defaults::jjImageScale));
-      auto baseBounds = bounds.withSizeKeepingCentre(jjW, jjH).translated(0, 200);
-
-      
-      // 设置运动参数：从“起始偏移”向上移动到“最高点偏移”
-      startYPosition = tremolo::defaults::jjAnimationStartYOffsetPx;
-      targetYPosition = tremolo::defaults::jjAnimationPeakYOffsetPx;
-      
-      // 强制设置图片到“起始偏移”位置，确保动画起点准确
-      jjImage.setBounds(baseBounds.translated(
-          0, -static_cast<int>(tremolo::defaults::jjAnimationStartYOffsetPx)));
-  }
-    
-    // 更新动画状态：无论是否触发新动画，都需要更新当前动画
-    updateAnimation();
+    // 根据当前皮肤，驱动XY区域的“指示灯联动动画”
+    updateXYSkinVisualsForIndicator(shouldFlash, 1.0 / 60.0);
 }
 
 // paint方法：绘制编辑器背景
@@ -645,7 +731,12 @@ void PluginEditor::resized() {
                            tremolo::defaults::settingsButtonWidthPx,
                            tremolo::defaults::settingsButtonHeightPx);
 
-  
+  // skins按钮位置：在设置按钮右侧
+  skinsButton.setBounds(tremolo::defaults::skinsButtonLeftPx,
+                        tremolo::defaults::skinsButtonTopPx,
+                        tremolo::defaults::skinsButtonWidthPx,
+                        tremolo::defaults::skinsButtonHeightPx);
+
   // 设置设置面板的位置：覆盖整个界面，但留出边距
   auto settingsPanelBounds = bounds.reduced(50);
   settingsPanel.setBounds(settingsPanelBounds);
@@ -655,36 +746,17 @@ void PluginEditor::resized() {
 
   // 计算增益控制区域的边界：顶部区域，高度80像素
   auto gainArea = bounds.removeFromTop(40);
-  
-  // // 设置增益标签：左侧，宽度60像素
-  // auto gainLabelBounds = gainArea.removeFromLeft(60);
-  // gainLabel.setBounds(gainLabelBounds);
-  
-  // // 设置增益控制条：剩余区域，左右留出20像素边距
-  // gainArea.reduce(20, 0);
-  // gainSlider.setBounds(gainArea);
 
-  // XY 控制器：固定长宽，通过左上角偏移确定位置
-  xyController.setBounds(tremolo::defaults::xyControllerLeftPx,
-                         tremolo::defaults::xyControllerTopPx,
-                         tremolo::defaults::xyControllerWidthPx,
-                         tremolo::defaults::xyControllerHeightPx);
+  // XY区域：固定长宽，通过左上角偏移确定位置
+  xyContainer.setBounds(tremolo::defaults::xyControllerLeftPx,
+                        tremolo::defaults::xyControllerTopPx,
+                        tremolo::defaults::xyControllerWidthPx,
+                        tremolo::defaults::xyControllerHeightPx);
 
-  // 计算旁路按钮的边界：右上角区域
-  // auto bypassButtonBounds = bounds;
-  // bypassButtonBounds.removeFromTop(0);
-  // bypassButtonBounds.removeFromRight(0);
-  // bypassButtonBounds.removeFromBottom(660);
-  // bypassButtonBounds.removeFromLeft(560);
-  // bypassButton.setBounds(bypassButtonBounds);
-
-  // 计算旁路标签的边界：旁路按钮上方
-  // auto bypassLabelBounds = bounds;
-  // bypassLabelBounds.removeFromTop(48);
-  // bypassLabelBounds.removeFromRight(104);
-  // bypassLabelBounds.removeFromBottom(206);
-  // bypassLabelBounds.removeFromLeft(396);
-  // bypassLabel.setBounds(bypassLabelBounds);
+  // XY区域内部子组件布局
+  btImage.setBounds(xyContainer.getLocalBounds());
+  jjClipper.setBounds(xyContainer.getLocalBounds());
+  xyController.setBounds(xyContainer.getLocalBounds());
 
   // 设置指示灯：固定长宽，通过左上角偏移确定位置
   indicatorLight.setBounds(tremolo::defaults::indicatorLightLeftPx,
@@ -692,29 +764,47 @@ void PluginEditor::resized() {
                            tremolo::defaults::indicatorLightWidthPx,
                            tremolo::defaults::indicatorLightHeightPx);
 
-  // 设置jj.png图片的位置和大小：基准尺寸(51x325) * 缩放比
-const auto jjW = juce::jmax(1, juce::roundToInt(51.0f * tremolo::defaults::jjImageScale));
-const auto jjH = juce::jmax(1, juce::roundToInt(325.0f * tremolo::defaults::jjImageScale));
-  auto baseBounds = bounds.withSizeKeepingCentre(jjW, jjH).translated(0, 200);
+  // tone控制点位置
+  {
+      const auto area = xyContainer.getLocalBounds().toFloat();
+      const float halfW = tremolo::defaults::xyToneMarkerWidthPx * 0.5f;
+      const float halfH = tremolo::defaults::xyToneMarkerHeightPx * 0.5f;
 
-  
-  // 图片位置管理逻辑：根据动画状态和第一次指示灯状态决定图片显示和位置
-  // 如果正在动画中，使用动画系统设置位置；否则根据第一次指示灯状态处理
-  if (isAnimating) {
-    // 动画进行中：调用updateAnimation()函数更新图片位置
-    // updateAnimation()会根据当前动画进度和缓动函数计算精确位置
-    updateAnimation(); // 更新动画位置
-  } else {
-    // 动画未进行：根据第一次指示灯状态处理图片
-    if (isFirstIndicatorFlash) {
-      // 第一次指示灯未亮起：保持图片隐藏状态
-      jjImage.setVisible(false);
-    } else {
-      // 第一次指示灯已亮起：显示图片并确保在初始位置（Y偏移为0）
-      jjImage.setVisible(true);
+      const float minX = area.getX() + halfW;
+      const float maxX = area.getRight() - halfW;
+      const float minY = area.getY() + halfH;
+      const float maxY = area.getBottom() - halfH;
+
+      const float xPos = minX + xyController.getXValue() * juce::jmax(1.0f, maxX - minX);
+      const float yPos = minY + xyController.getYValue() * juce::jmax(1.0f, maxY - minY);
+
+      toneImage.setBounds(juce::Rectangle<int>{
+          static_cast<int>(std::round(xPos - halfW)),
+          static_cast<int>(std::round(yPos - halfH)),
+          tremolo::defaults::xyToneMarkerWidthPx,
+          tremolo::defaults::xyToneMarkerHeightPx});
+  }
+
+  // jj.png 基础位置（未动画时保持静止）
+  if (!isAnimating) {
+      const auto baseBounds = xyContainer.getLocalBounds()
+                                 .withSizeKeepingCentre(
+                                     juce::jmax(1, juce::roundToInt(51.0f * tremolo::defaults::jjImageScale)),
+                                     juce::jmax(1, juce::roundToInt(325.0f * tremolo::defaults::jjImageScale)))
+                                 .translated(0, 200);
       jjImage.setBounds(baseBounds.translated(
           0, -static_cast<int>(tremolo::defaults::jjAnimationStartYOffsetPx)));
-    }
+  }
+
+  // 确保整体层级：背景最底，设置按钮/指示灯在上，XY区域最后绘制
+  background.toBack();
+  settingsButton.toFront(false);
+  indicatorLight.toFront(false);
+  xyContainer.toFront(false);
+
+  // 设置面板如果可见，永远在最顶层
+  if (isSettingsPanelVisible) {
+      settingsPanel.toFront(false);
   }
 }
 
@@ -741,7 +831,7 @@ float PluginEditor::easeOutInQuad(float t) {
 void PluginEditor::updateAnimation() {
     // 检查动画是否正在进行，如果未激活则直接返回
     if (!isAnimating) return;
-    
+
     // 计算动画进度：每次调用增加1/30秒的进度（假设30fps）
     // animationDuration：动画总持续时间（秒）
     // 60.0f：假设60fps的更新频率，确保动画速度准确
@@ -766,24 +856,24 @@ void PluginEditor::updateAnimation() {
             targetYPosition = tremolo::defaults::jjAnimationPeakYOffsetPx;
             
             // 强制设置图片回到初始位置，确保归位准确
-            auto bounds = getLocalBounds();
-const auto jjW = juce::jmax(1, juce::roundToInt(51.0f * tremolo::defaults::jjImageScale));
-const auto jjH = juce::jmax(1, juce::roundToInt(325.0f * tremolo::defaults::jjImageScale));
-            auto baseBounds = bounds.withSizeKeepingCentre(jjW, jjH).translated(0, 200);
+            const auto baseBounds = xyContainer.getLocalBounds()
+                                       .withSizeKeepingCentre(
+                                           juce::jmax(1, juce::roundToInt(51.0f * tremolo::defaults::jjImageScale)),
+                                           juce::jmax(1, juce::roundToInt(325.0f * tremolo::defaults::jjImageScale)))
+                                       .translated(0, 200);
             jjImage.setBounds(baseBounds.translated(
                 0, -static_cast<int>(tremolo::defaults::jjAnimationStartYOffsetPx)));
             return; // 直接返回，不再执行后续位置计算
 
         }
     }
-    
-    // 更新图片位置：根据当前动画状态计算Y轴偏移量
-    auto bounds = getLocalBounds();
-const auto jjW = juce::jmax(1, juce::roundToInt(51.0f * tremolo::defaults::jjImageScale));
-const auto jjH = juce::jmax(1, juce::roundToInt(325.0f * tremolo::defaults::jjImageScale));
-    auto baseBounds = bounds.withSizeKeepingCentre(jjW, jjH).translated(0, 200);
 
-    
+    const auto baseBounds = xyContainer.getLocalBounds()
+                               .withSizeKeepingCentre(
+                                   juce::jmax(1, juce::roundToInt(51.0f * tremolo::defaults::jjImageScale)),
+                                   juce::jmax(1, juce::roundToInt(325.0f * tremolo::defaults::jjImageScale)))
+                               .translated(0, 200);
+
     float currentYOffset = 0.0f;
     if (isMovingUp) {
         // 向上运动阶段：使用先快后慢的缓动函数

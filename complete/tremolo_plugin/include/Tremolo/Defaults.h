@@ -1,11 +1,12 @@
 #pragma once
 
+#include <array>
+
 namespace tremolo::defaults {
 
 // 参数默认值（这些值用于：参数创建默认值、UI初始值、以及序列化fallback）
 
 inline constexpr float modulationRateHz = 5.0f;
-inline constexpr bool bypassed = false;
 inline constexpr int waveformIndex = 0; // 0=Sine
 
 inline constexpr float xyX = 1.0f;
@@ -39,6 +40,31 @@ inline constexpr int settingsButtonHeightPx = 27;
 inline constexpr int settingsButtonLeftPx = 10;
 inline constexpr int settingsButtonTopPx = 7;
 
+// skins按钮布局（像素）：位于设置按钮右侧
+inline constexpr int skinsButtonWidthPx = 60;
+inline constexpr int skinsButtonHeightPx = settingsButtonHeightPx;
+inline constexpr int skinsButtonLeftPx = settingsButtonLeftPx + settingsButtonWidthPx + 8;
+inline constexpr int skinsButtonTopPx = settingsButtonTopPx;
+
+// HCR皮肤：指示灯闪烁时的逐帧动画帧率
+inline constexpr float hcrIndicatorAnimFps = 30.0f;
+
+// XY皮肤配置：默认皮肤与切换顺序（方便后续扩展多套皮肤）
+// 约定：BT=第一套（assets/BT），HCR=第二套（assets/HCR）
+enum class XYSkinId : int {
+  BT = 0,
+  HCR = 1,
+};
+
+// 默认皮肤（启动时使用）
+inline constexpr XYSkinId xyDefaultSkin = XYSkinId::HCR;
+
+// 皮肤切换顺序（按顺序循环）。新增皮肤时把新枚举追加到这里即可。
+inline constexpr std::array<XYSkinId, 2> xySkinCycleOrder = {
+    XYSkinId::BT,
+    XYSkinId::HCR,
+};
+
 // 指示灯布局（像素）：固定尺寸 + 左上角偏移
 inline constexpr int indicatorLightWidthPx = 20;
 inline constexpr int indicatorLightHeightPx = 20;
@@ -64,8 +90,8 @@ inline constexpr float triggerThresholdDb = -15.0f;
 
 // 指示灯闪烁时长（秒）：首次默认值与动态时长限制
 inline constexpr float indicatorFlashDurationSecDefault = 0.4f;
-inline constexpr float indicatorFlashDurationSecMin = 0.1f;
-inline constexpr float indicatorFlashDurationSecMax = 1.0f;
+inline constexpr float indicatorFlashDurationSecMin = 0.05f;
+inline constexpr float indicatorFlashDurationSecMax = 0.8f;
 
 // 动态时长缩放：最近若干次触发间隔平均值 * scale
 inline constexpr float indicatorFlashDurationScale = 0.8f;

@@ -34,7 +34,6 @@ public:
   void setStateInformation(const void* data, int sizeInBytes) override;
 
   [[nodiscard]] Parameters& getParameterRefs() noexcept;
-  juce::AudioProcessorParameter* getBypassParameter() const noexcept override;
   
   // 获取Tremolo实例（用于指示灯控制）
   Tremolo& getTremolo() noexcept { return tremolo; }
@@ -74,7 +73,6 @@ private:
 
   Parameters parameters{*this};
   Tremolo tremolo;
-  BypassTransitionSmoother bypassTransitionSmoother;
   std::atomic<double> currentSampleRate{0.};
   std::atomic<float> latestInputLevel{0.0f};
   std::atomic<float> latestWindowedInputPeak{0.0f};

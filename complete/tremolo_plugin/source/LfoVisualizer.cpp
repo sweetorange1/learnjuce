@@ -1,12 +1,9 @@
-
 namespace tremolo {
 
 LfoVisualizer::LfoVisualizer(ReadAllLfoSamples readSamples,
-                             GetCurrentSampleRate getRate,
-                             IsBypassed getIsBypassed)
+                             GetCurrentSampleRate getRate)
     : readAllLfoSamples{std::move(readSamples)},
-      getCurrentSampleRate{std::move(getRate)},
-      isBypassed{std::move(getIsBypassed)} {
+      getCurrentSampleRate{std::move(getRate)} {
   // preallocate
   buffer.setSize(1, static_cast<int>(getCurrentSampleRate()));
 
@@ -57,12 +54,7 @@ void LfoVisualizer::updateSamplesQueue(double timestampSeconds) {
 
   const auto newAvailableSamples = buffer.getNumSamples();
 
-  if (isBypassed()) {
-    const auto secondsPassed = timestampSeconds - *lastTimestampSeconds;
-    const auto samplesPassed =
-        static_cast<size_t>(getCurrentSampleRate() * secondsPassed);
-    lfoSamplesToPlot.pushBackZeros(samplesPassed);
-  } else if (newAvailableSamples > 0) {
+  if (newAvailableSamples > 0) {
     lfoSamplesToPlot.pushBack(std::span{
         buffer.getReadPointer(0), static_cast<size_t>(buffer.getNumSamples())});
   }

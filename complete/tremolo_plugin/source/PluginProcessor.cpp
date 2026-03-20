@@ -80,14 +80,6 @@ void PluginProcessor::prepareToPlay(double sampleRate,
   // 准备颤音效果器：传入采样率和最大块大小
   tremolo.prepare(sampleRate, expectedMaxFramesPerBlock);
 
-  // 准备旁路过渡平滑器：配置平滑过渡参数
-  bypassTransitionSmoother.prepare(
-      // 使用初始化列表配置平滑器参数
-      {.sampleRate = sampleRate,
-       .maximumBlockSize = static_cast<uint32_t>(expectedMaxFramesPerBlock),
-       .numChannels = static_cast<uint32_t>(juce::jmax(
-           getTotalNumInputChannels(), getTotalNumOutputChannels()))});
-
   const auto inputChannelCount = juce::jmax(1, getTotalNumInputChannels());
   // 修复：避免使用assign方法，改用resize和循环初始化
   detectionHighpassFilters.resize(static_cast<size_t>(inputChannelCount));
@@ -108,7 +100,6 @@ void PluginProcessor::prepareToPlay(double sampleRate,
 void PluginProcessor::releaseResources() {
   // 当播放停止时，您可以使用此机会释放任何空闲内存等
   tremolo.reset();
-  bypassTransitionSmoother.reset();
   detectionHighpassFilters.clear();
   detectionLowpassFilters.clear();
   latestInputLevel.store(0.0f, std::memory_order_relaxed);
@@ -171,32 +162,14 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     buffer.clear(channelToClear, 0, buffer.getNumSamples());
   }
 
-  // 检查是否处于完全旁路状态且没有过渡过程
-  const auto bypassedAndNotTransitioning =
-      parameters.bypassed.get() && !bypassTransitionSmoother.isTransitioning();
-
   // 更新最大增益值
   tremolo.setMaxGain(parameters.gain.get());
   
   // 更新XY控制器参数（根据XY位置计算实际增益）
   tremolo.setXYValues(parameters.xValue.get(), parameters.yValue.get());
 
-  // 设置旁路状态到过渡平滑器
-  bypassTransitionSmoother.setBypass(parameters.bypassed);
-
-  // 如果插件完全旁路，避免处理音频数据
-  if (bypassedAndNotTransitioning) {
-    return;
-  }
-
-  // 设置干信号缓冲区（原始输入信号）
-  bypassTransitionSmoother.setDryBuffer(buffer);
-
   // 应用颤音效果到音频缓冲区
   tremolo.process(buffer);
-
-  // 将处理后的湿信号与干信号混合
-  bypassTransitionSmoother.mixToWetBuffer(buffer);
 }
 
 // 检查是否有自定义编辑器：返回true表示插件有图形界面
@@ -232,23 +205,12 @@ void PluginProcessor::setStateInformation(const void* data, int sizeInBytes) {
     // 目前，我们只是将错误消息写入标准错误流
     DBG(result.getErrorMessage());
   }
-
-  // 设置旁路状态
-  bypassTransitionSmoother.setBypassForced(parameters.bypassed);
 }
 
 // 获取参数引用：返回参数管理对象的引用
 Parameters& PluginProcessor::getParameterRefs() noexcept {
   return parameters;
 }
-
-// 获取旁路参数：返回旁路参数的指针
-juce::AudioProcessorParameter* PluginProcessor::getBypassParameter()
-    const noexcept {
-  return &parameters.bypassed;
-}
-
-
 
 // 线程安全地获取采样率：在多线程环境中安全获取当前采样率
 double PluginProcessor::getSampleRateThreadSafe() const noexcept {

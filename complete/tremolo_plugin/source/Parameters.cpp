@@ -18,16 +18,6 @@ juce::AudioParameterFloat& createModulationRateParameter(
           juce::AudioParameterFloatAttributes{}.withLabel("Hz")));
 }
 
-juce::AudioParameterBool& createBypassedParameter(
-    juce::AudioProcessor& processor) {
-  constexpr auto versionHint = 1;
-  return addParameterToProcessor(
-      processor,
-      std::make_unique<juce::AudioParameterBool>(
-          juce::ParameterID{"bypassed", versionHint}, "Bypass",
-          tremolo::defaults::bypassed));
-}
-
 juce::AudioParameterChoice& createWaveformParameter(
     juce::AudioProcessor& processor) {
   constexpr auto versionHint = 1;
@@ -94,7 +84,6 @@ juce::AudioParameterFloat& createLevelCaptureWindowMsParameter(
 
 Parameters::Parameters(juce::AudioProcessor& processor)
     : rate{createModulationRateParameter(processor)},
-      bypassed{createBypassedParameter(processor)},
       waveform{createWaveformParameter(processor)},
       xValue{createXValueParameter(processor)},
       yValue{createYValueParameter(processor)},

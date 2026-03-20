@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "VolumeMeter.h"
+#include "Defaults.h"
 
 namespace tremolo {
 
@@ -33,9 +34,6 @@ private:
     float yValue{0.5f}; // Y值，范围0.0到1.0
     std::function<void(float, float)> valueChangeCallback;
 
-    // 控制点图片（tone.png）缓存
-    juce::Image toneMarkerImage;
-    
     // 更新位置并触发回调
     void updatePosition(juce::Point<float> position);
 
@@ -88,19 +86,42 @@ private:
 };
 
 class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
-public:
-  explicit PluginEditor(PluginProcessor&);
-  ~PluginEditor() override;
+ public:
+   explicit PluginEditor(PluginProcessor&);
+   ~PluginEditor() override;
 
-  void resized() override;
-  void paint(juce::Graphics& g) override;
-  void timerCallback() override;
+   void resized() override;
+   void paint(juce::Graphics& g) override;
+   void timerCallback() override;
 
-private:
+ private:
   juce::ImageComponent background;
   juce::ImageComponent logo;
+
+  // XY控制器视觉与交互分离：
+  // - xyContainer: 负责XY区域的统一布局/裁剪/层级
+  // - btImage: XY底图（bt.png）
+  // - jjClipper + jjImage: jj动画图（jj.png），越界部分自动裁剪
+  // - toneImage: XY控制点（tone.png）
+  juce::Component xyContainer;
+  juce::ImageComponent btImage;
+  juce::Component jjClipper; // 用于裁剪jj.png显示范围（限制在XY控制器内部）
   juce::ImageComponent jjImage;
+  juce::ImageComponent toneImage;
+
   juce::ImageButton settingsButton; // 设置按钮
+  juce::TextButton skinsButton;   // skins按钮（切换XY皮肤）
+
+  tremolo::defaults::XYSkinId currentXYSkin{tremolo::defaults::XYSkinId::BT};
+  bool xySkinInitialized{false};
+
+  // 指示灯状态边沿检测（用于触发“每次闪烁”动画）
+  bool wasIndicatorFlashing{false};
+
+  // HCR皮肤：逐帧动画状态（002->006）
+  bool hcrFrameAnimActive{false};
+  int hcrFrameIndex{0};
+  double hcrFrameTimeAccSec{0.0};
 
   // 图片动画相关变量
   bool isAnimating = false;
@@ -122,9 +143,11 @@ private:
   // 动画更新函数
   void updateAnimation();
 
-  juce::Label bypassLabel{"bypass label", "BYPASS"};
-  juce::ToggleButton bypassButton{"BYPASSED"};
-  juce::ButtonParameterAttachment bypassAttachment;
+  // XY皮肤切换与动画驱动
+  void setXYSkin(tremolo::defaults::XYSkinId newSkin);
+  void updateXYSkinVisualsForIndicator(bool shouldFlash, double dtSec);
+  void startHcrFrameAnimation();
+  void stopHcrFrameAnimation();
 
   juce::Label gainLabel{"gain label", "GAIN"}; // 增益标签
   juce::Slider gainSlider; // 增益控制条

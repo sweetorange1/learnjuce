@@ -5,11 +5,9 @@ class LfoVisualizer : public juce::Component {
 public:
   using ReadAllLfoSamples = std::function<void(juce::AudioBuffer<float>&)>;
   using GetCurrentSampleRate = std::function<double()>;
-  using IsBypassed = std::function<bool()>;
 
   LfoVisualizer(ReadAllLfoSamples readSamples,
-                GetCurrentSampleRate getRate,
-                IsBypassed getIsBypassed);
+                GetCurrentSampleRate getRate);
 
   void paint(juce::Graphics& g) override;
 
@@ -48,7 +46,6 @@ private:
   juce::Colour backgroundColour{juce::Colour(0xFF1A1A1A)};
   ReadAllLfoSamples readAllLfoSamples;
   GetCurrentSampleRate getCurrentSampleRate;
-  IsBypassed isBypassed;
   juce::AudioBuffer<float> buffer;
   juce::Path lfoCurve;
 

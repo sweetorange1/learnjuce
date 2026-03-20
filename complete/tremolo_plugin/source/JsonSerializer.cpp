@@ -1,7 +1,6 @@
 namespace {
 struct SerializableParameters {
   float rate;
-  bool bypassed;
   juce::String waveform;
   float x{tremolo::defaults::xyX};
   float y{tremolo::defaults::xyY};
@@ -27,7 +26,7 @@ struct SerializableParameters {
       return;
     }
 
-    archive(named("modulationRateHz", p.rate), named("bypassed", p.bypassed),
+    archive(named("modulationRateHz", p.rate),
             named("modulationWaveform", p.waveform));
 
     if (version >= 2) {
@@ -43,7 +42,6 @@ struct SerializableParameters {
 SerializableParameters from(const tremolo::Parameters& p) {
   return {
       .rate = p.rate.get(),
-      .bypassed = p.bypassed.get(),
       .waveform = p.waveform.getCurrentChoiceName(),
       .x = p.xValue.get(),
       .y = p.yValue.get(),
@@ -97,7 +95,6 @@ juce::Result JsonSerializer::deserialize(juce::InputStream& input,
 
   parameters.waveform = modulationWaveformIndex;
   parameters.rate = parsedParameters->rate;
-  parameters.bypassed = parsedParameters->bypassed;
 
   const auto version = static_cast<int>(parsedResult.getProperty("__version__", 0));
   if (version >= 2) {
