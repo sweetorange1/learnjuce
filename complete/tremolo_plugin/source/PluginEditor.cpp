@@ -50,18 +50,18 @@ const BinaryImage kHcrTone{assets::tone_png2, assets::tone_png2Size};
 // SettingsPanel类的实现
 SettingsPanel::SettingsPanel() {
     // 设置标题标签
-    titleLabel.setText("Settings", juce::dontSendNotification);
+    titleLabel.setText("Audio Trigger Setting", juce::dontSendNotification);
     titleLabel.setJustificationType(juce::Justification::centred);
     titleLabel.setFont(juce::Font(juce::FontOptions(18.0f, juce::Font::bold)));
     titleLabel.setColour(juce::Label::textColourId, juce::Colour(0xFFE6E6E6));
     addAndMakeVisible(titleLabel);
 
-    volumeLabel.setText("Input Level", juce::dontSendNotification);
+    volumeLabel.setText("Thresh", juce::dontSendNotification);
     volumeLabel.setJustificationType(juce::Justification::centredLeft);
     volumeLabel.setColour(juce::Label::textColourId, juce::Colour(0xFFD0D0D0));
     addAndMakeVisible(volumeLabel);
 
-    waveformToggle.setButtonText("Scrolling Curve");
+    waveformToggle.setButtonText("Display Switching");
     waveformToggle.setToggleState(true, juce::dontSendNotification);
     waveformToggle.onClick = [this]() {
         setVolumeMeterMode(waveformToggle.getToggleState());
@@ -71,7 +71,7 @@ SettingsPanel::SettingsPanel() {
     volumeMeter.setDisplayMode(true);
     addAndMakeVisible(volumeMeter);
 
-    levelWindowLabel.setText("Level Window", juce::dontSendNotification);
+    levelWindowLabel.setText("Detail", juce::dontSendNotification);
     levelWindowLabel.setJustificationType(juce::Justification::centredLeft);
     levelWindowLabel.setColour(juce::Label::textColourId, juce::Colour(0xFFD0D0D0));
     addAndMakeVisible(levelWindowLabel);
@@ -583,14 +583,14 @@ void PluginEditor::stopHcrFrameAnimation() {
     hcrFrameTimeAccSec = 0.0;
 }
 
-void PluginEditor::updateXYSkinVisualsForIndicator(bool shouldFlash, double dtSec) {
-    // 边沿检测：只在“本次闪烁开始”触发一次
-    const bool risingEdge = shouldFlash && !wasIndicatorFlashing;
+void PluginEditor::updateXYSkinVisualsForIndicator(bool shouldFlash, bool retriggered, double dtSec) {
+    // 边沿检测：首次亮起，或“重触发”时都视为一次新的触发
+    const bool risingEdge = shouldFlash && (!wasIndicatorFlashing || retriggered);
     wasIndicatorFlashing = shouldFlash;
 
     if (currentXYSkin == tremolo::defaults::XYSkinId::BT) {
         // BT：使用jj.png上下往复动画
-        if (shouldFlash && !isAnimating) {
+        if (shouldFlash && (!isAnimating || retriggered)) {
             auto& audioProcessor = dynamic_cast<PluginProcessor&>(processor);
 
             isAnimating = true;
@@ -690,12 +690,22 @@ void PluginEditor::timerCallback() {
             tremolo::defaults::xyToneMarkerHeightPx});
     }
     
+    constexpr double dtSec = 1.0 / 60.0;
+
     // 更新指示灯状态：传入时间增量（1/60秒）
     // 指示灯根据音频信号的峰值决定是否闪烁
-    audioProcessor.getTremolo().updateIndicatorState(1.0f / 60.0f);
+    auto& trem = audioProcessor.getTremolo();
+    trem.updateIndicatorState(static_cast<float>(dtSec));
+
+    // 读取“阈值触发序列号”，用于识别快速连续触发
+    const auto triggerSeq = trem.getIndicatorTriggerSequence();
+    const bool retriggered = (triggerSeq != lastIndicatorTriggerSequence);
+    if (retriggered) {
+        lastIndicatorTriggerSequence = triggerSeq;
+    }
 
     // 获取指示灯当前是否应该闪烁的状态
-    bool shouldFlash = audioProcessor.getTremolo().shouldFlashIndicator();
+    bool shouldFlash = trem.shouldFlashIndicator();
 
     // 将输入信号实时推送给设置面板中的滚动电平窗。
     settingsPanel.updateVolumeLevel(audioProcessor.getLatestInputLevel());
@@ -705,10 +715,11 @@ void PluginEditor::timerCallback() {
                                             audioProcessor.getInputLowpassHz());
 
     // 设置指示灯组件的闪烁状态
-    indicatorLight.setFlashing(shouldFlash);
+    // 如果发生“重触发”，则本帧强制熄灭一次，下一帧会继续亮起，形成“快速灭亮一次”的提示
+    indicatorLight.setFlashing(retriggered ? false : shouldFlash);
     
     // 根据当前皮肤，驱动XY区域的“指示灯联动动画”
-    updateXYSkinVisualsForIndicator(shouldFlash, 1.0 / 60.0);
+    updateXYSkinVisualsForIndicator(shouldFlash, retriggered, dtSec);
 }
 
 // paint方法：绘制编辑器背景

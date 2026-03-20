@@ -60,7 +60,7 @@ private:
     juce::Colour meterForeground{juce::Colour(0xFFBDBDBD)};     // 前景色（灰）
     juce::Colour peakIndicator{juce::Colour(0xFFE6E6E6)};       // 峰值指示器（亮灰）
     juce::Colour waveformColor{juce::Colour(0xFFC8C8C8)};       // 波形颜色（灰）
-    juce::Colour thresholdColor{juce::Colour(0xFF9A9A9A)};      // 阈值线颜色（灰）
+    juce::Colour thresholdColor{juce::Colour(0xFFE04A4A)};      // 阈值线颜色（红，提示该线为手动设置）
 
     static constexpr float minThresholdDb = -60.0f;
     static constexpr float maxThresholdDb = 0.0f;

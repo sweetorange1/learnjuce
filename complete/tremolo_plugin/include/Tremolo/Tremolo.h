@@ -2,6 +2,8 @@
 #include <juce_dsp/juce_dsp.h>
 #include "Defaults.h"
 
+#include <atomic>
+
 namespace tremolo {
 
 // 颤音效果器主类（简化版，只保留增益和clipper效果）
@@ -117,6 +119,12 @@ public:
     return isFlashing;
   }
 
+  // 获取“阈值触发次数”（单调递增）。用于UI识别“快速连续触发”并立即重播动画。
+  // 注意：该值只在“从低于阈值->高于阈值”的上升沿时递增。
+  uint64_t getIndicatorTriggerSequence() const noexcept {
+    return indicatorTriggerSequence.load(std::memory_order_relaxed);
+  }
+
   // 获取指示灯亮起持续时间
   float getIndicatorDuration() const noexcept {
     return flashDurationSeconds;
@@ -144,6 +152,8 @@ private:
 
     // 如果从低于阈值变为高于阈值，触发闪烁
     if (isAboveThreshold && !wasAboveThreshold) {
+      indicatorTriggerSequence.fetch_add(1, std::memory_order_relaxed);
+
       // 记录本次触发与上次触发的间隔（从第二次触发开始才有意义）
       if (hasLastTrigger) {
         const auto intervalSec = levelDetectionElapsedSeconds;
@@ -207,6 +217,9 @@ private:
   std::array<float, 3> recentTriggerIntervalsSec {0.0f, 0.0f, 0.0f};
   size_t recentTriggerIntervalWriteIndex = 0;
   int recentTriggerIntervalCount = 0;
-};
+
+  // 指示灯触发序列号（每次阈值上升沿递增）
+  std::atomic<uint64_t> indicatorTriggerSequence{0};
+ };
 
 }  // namespace tremolo

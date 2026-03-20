@@ -118,6 +118,9 @@ class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
   // 指示灯状态边沿检测（用于触发“每次闪烁”动画）
   bool wasIndicatorFlashing{false};
 
+  // 指示灯“阈值触发序列号”追踪：用于识别快速连续触发并立刻重播动画
+  uint64_t lastIndicatorTriggerSequence{0};
+
   // HCR皮肤：逐帧动画状态（002->006）
   bool hcrFrameAnimActive{false};
   int hcrFrameIndex{0};
@@ -145,7 +148,7 @@ class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
 
   // XY皮肤切换与动画驱动
   void setXYSkin(tremolo::defaults::XYSkinId newSkin);
-  void updateXYSkinVisualsForIndicator(bool shouldFlash, double dtSec);
+  void updateXYSkinVisualsForIndicator(bool shouldFlash, bool retriggered, double dtSec);
   void startHcrFrameAnimation();
   void stopHcrFrameAnimation();
 
