@@ -2,6 +2,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "VolumeMeter.h"
 #include "Defaults.h"
+#include "XYSkinAnimator.h"
+#include "JjAnimator.h"
 
 #include <atomic>
 #include <thread>
@@ -138,7 +140,7 @@ class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
   juce::ImageButton settingsButton; // 设置按钮
   juce::TextButton skinsButton;   // skins按钮（切换XY皮肤）
 
-  tremolo::defaults::XYSkinId currentXYSkin{tremolo::defaults::XYSkinId::BT};
+  tremolo::defaults::XYSkinId currentXYSkin{tremolo::defaults::xyDefaultSkin};
   bool xySkinInitialized{false};
 
   // 指示灯状态边沿检测（用于触发“每次闪烁”动画）
@@ -159,113 +161,26 @@ class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
   double bpmFlashTimerSec{0.0};
   int bpmHistoryPulseFramesRemaining{0};
 
-  // HCR皮肤：逐帧动画状态（002->006）
-  bool hcrFrameAnimActive{false};
-  int hcrFrameIndex{0};
-  double hcrFrameTimeAccSec{0.0};
+  // XY皮肤预设动画管理（HCR/GGGG/WB/DS/ZSZ），从PluginEditor中剥离
+  XYSkinAnimator xySkinAnimator;
 
-  // HCR皮肤：sprite sheet逐帧动画状态（22帧），底图仍使用001.png
-  juce::Image hcrSpriteSheet;
-  int hcrTriggerStep{+1};
-  int hcrTriggerEndFrame{0};
+  // JJ预设动画：单独文件，当前默认禁用（仅保留结构）
+  JjAnimator jjAnimator;
 
-  // GGGG皮肤：sprite sheet逐帧动画状态（25帧），底图使用第0帧
-  bool ggggFrameAnimActive{false};
-  int ggggFrameIndex{0};
-  double ggggFrameTimeAccSec{0.0};
-  juce::Image ggggSpriteSheet;
-
-  // GGGG皮肤：按 Defaults.h 的 ggggTriggerFrameProgram 分段播放
-  int ggggTriggerProgramIndex{0}; // 下次触发要播放的段索引
-  int ggggTriggerStep{+1};        // 本段播放步进（+1/-1）
-  int ggggTriggerEndFrame{0};     // 本段结束帧（停留帧）
-
-  // WB皮肤：sprite sheet逐帧动画状态（1行×64列，每帧550×550；每次触发播放32帧，遇到边界停留并反向）
-  bool wbFrameAnimActive{false};
-  int wbFrameIndex{0}; // 0..63
-  int wbFrameDir{+1};  // +1=向前(左->右)，-1=向后(右->左)
-  int wbFramesRemaining{0}; // 当前触发还剩多少步（最多32）
-  double wbFrameTimeAccSec{0.0};
-  juce::Image wbSpriteSheet;
-
-  // WB皮肤：按 Defaults.h 的 wbTriggerFrameProgram 分段播放
-  int wbTriggerProgramIndex{0}; // 下次触发要播放的段索引
-  int wbTriggerStep{+1};        // 本段播放步进（+1/-1）
-  int wbTriggerEndFrame{0};     // 本段结束帧（停留帧）
-
-  // DS皮肤：sprite sheet逐帧动画状态（57帧），底图使用第0帧
-  bool dsFrameAnimActive{false};
-  int dsFrameIndex{0};
-  double dsFrameTimeAccSec{0.0};
-  juce::Image dsSpriteSheet;
-
-  // DS皮肤：按 Defaults.h 的 dsTriggerFrameProgram 分段往复播放
-  int dsTriggerProgramIndex{0}; // 下次触发要播放的段索引
-  int dsTriggerStep{+1};        // 本段播放步进（+1/-1）
-  int dsTriggerEndFrame{0};     // 本段结束帧（停留帧）
-
-  // ZSZ皮肤：sprite sheet逐帧动画状态（6帧），底图使用第0帧
-  bool zszFrameAnimActive{false};
-  int zszFrameIndex{0};
-  double zszFrameTimeAccSec{0.0};
-  juce::Image zszSpriteSheet;
-
-  // ZSZ皮肤：按 Defaults.h 的 zszTriggerFrameProgram 播放（每次触发 0->5 播放一次并停留）
-  int zszTriggerProgramIndex{0}; // 预留：保持与其它皮肤一致
-  int zszTriggerStep{+1};
-  int zszTriggerEndFrame{0};
-
-  // WB皮肤：异步加载sprite sheet（避免切换皮肤时卡顿）
-  std::atomic<bool> wbSpriteSheetLoading{false};
-  std::atomic<bool> wbSpriteSheetLoadCancel{false};
-  std::thread wbSpriteSheetLoadThread;
-
-  // UI：切换皮肤加载提示
-  bool skinLoadingOverlayVisible{false};
-  juce::String skinLoadingOverlayText{"Loading skin..."};
+  // UI：切换皮肤加载提示（由xySkinAnimator维护）
 
   // 图片动画相关变量
-  bool isAnimating = false;
-  bool isMovingUp = true;
-  float animationProgress = 0.0f;
-  float animationDuration = 0.0f;
-  float startYPosition = 0.0f;
-  float targetYPosition = 0.0f;
-  bool isFirstIndicatorFlash = true; // 是否是第一次指示灯亮起，用于控制图片初始隐藏状态
+  // 旧JJ动画变量已迁移至 JjAnimator（当前默认禁用）
   
   // 设置面板相关变量
   SettingsPanel settingsPanel;
   bool isSettingsPanelVisible = false;
   
-  // 缓动函数：实现先快后慢和由慢变快的效果
-  float easeInOutQuad(float t);
-  float easeOutInQuad(float t);
-  
-  // 动画更新函数
-  void updateAnimation();
+  // JJ动画实现已迁移至 JjAnimator
 
   // XY皮肤切换与动画驱动
   void setXYSkin(tremolo::defaults::XYSkinId newSkin);
   void updateXYSkinVisualsForIndicator(bool shouldFlash, bool retriggered, double dtSec);
-  void startHcrFrameAnimation();
-  void stopHcrFrameAnimation();
-  void setHcrFrameIndex(int newIndex);
-
-  void startGgggFrameAnimation();
-  void stopGgggFrameAnimation();
-  void setGgggFrameIndex(int newIndex);
-
-  void startDsFrameAnimation();
-  void stopDsFrameAnimation();
-  void setDsFrameIndex(int newIndex);
-
-  void startZszFrameAnimation();
-  void stopZszFrameAnimation();
-  void setZszFrameIndex(int newIndex);
-
-  void stopWbFrameAnimation();
-  void setWbFrameIndex(int newIndex);
-  void beginLoadWbSpriteSheetAsync();
 
   XYController xyController; // XY控制器组件
   MessageOnClick about;

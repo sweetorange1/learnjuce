@@ -69,7 +69,9 @@ inline constexpr double hcrIndicatorFrameDurationSec = 1.0 / 60.0;
 inline constexpr double ggggIndicatorFrameDurationSec = 1.0 / 60.0;
 inline constexpr double wbIndicatorFrameDurationSec = 1.0 / 60.0;
 inline constexpr double dsIndicatorFrameDurationSec = 1.0 / 60.0;
-inline constexpr double zszIndicatorFrameDurationSec = 1.0 / 20.0;
+inline constexpr double zszIndicatorFrameDurationSec = 1.0 / 30.0;
+inline constexpr double ybIndicatorFrameDurationSec = 1.0 / 60.0;
+inline constexpr double danIndicatorFrameDurationSec = 1.0 / 60.0;
 
 // “分段播放”类型皮肤：每次触发播放的帧区间配置（含起止帧，inclusive）
 // 说明：
@@ -114,6 +116,26 @@ inline constexpr std::array<SkinTriggerFrameSpan, 1> zszTriggerFrameProgram = {
     SkinTriggerFrameSpan{0, 5},
 };
 
+// YB：一张sprite sheet（54帧，0..53），每次触发播放一段（往复）
+// 分段：0->26, 26->53, 53->26, 26->0
+inline constexpr std::array<SkinTriggerFrameSpan, 4> ybTriggerFrameProgram = {
+    SkinTriggerFrameSpan{0, 26},
+    SkinTriggerFrameSpan{26, 53},
+    SkinTriggerFrameSpan{53, 26},
+    SkinTriggerFrameSpan{26, 0},
+};
+
+// DAN：一张sprite sheet（77帧，0..76），每次触发播放三段，然后按相反方向播放三段（往复）
+// 你给的区间是 1-25 / 25-50 / 50-77，这里换算成 0-based 帧索引：0-24 / 24-49 / 49-76
+inline constexpr std::array<SkinTriggerFrameSpan, 6> danTriggerFrameProgram = {
+    SkinTriggerFrameSpan{0, 24},
+    SkinTriggerFrameSpan{24, 49},
+    SkinTriggerFrameSpan{49, 76},
+    SkinTriggerFrameSpan{76, 49},
+    SkinTriggerFrameSpan{49, 24},
+    SkinTriggerFrameSpan{24, 0},
+};
+
 // 兼容旧配置（过去用fps表示）：建议新代码改用 *FrameDurationSec
 inline constexpr float hcrIndicatorAnimFps = static_cast<float>(1.0 / hcrIndicatorFrameDurationSec);
 
@@ -126,19 +148,22 @@ enum class XYSkinId : int {
   WB = 3,
   DS = 4,
   ZSZ = 5,
+  YB = 6,
+  DAN = 7,
 };
 
 // 默认皮肤（启动时使用）
 inline constexpr XYSkinId xyDefaultSkin = XYSkinId::HCR;
 
 // 皮肤切换顺序（按顺序循环）。新增皮肤时把新枚举追加到这里即可。
-inline constexpr std::array<XYSkinId, 6> xySkinCycleOrder = {
-    XYSkinId::BT,
+inline constexpr std::array<XYSkinId, 7> xySkinCycleOrder = {
     XYSkinId::HCR,
     XYSkinId::GGGG,
     XYSkinId::WB,
     XYSkinId::DS,
     XYSkinId::ZSZ,
+    XYSkinId::YB,
+    XYSkinId::DAN,
 };
 
 // 指示灯布局（像素）：固定尺寸 + 左上角偏移

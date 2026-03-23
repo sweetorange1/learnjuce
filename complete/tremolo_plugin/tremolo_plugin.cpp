@@ -6,5 +6,7 @@
 #include "source/Parameters.cpp"
 #include "source/VolumeMeter.cpp"
 #include "source/PluginEditor.cpp"
+#include "source/XYSkinAnimator.cpp"
+#include "source/JjAnimator.cpp"
 #include "source/PluginProcessor.cpp"
 #include "source/SpectrumAnalyser.cpp"

@@ -183,6 +183,30 @@ juce_add_binary_data(tremolo_plugin_assets_zsz
 
 add_library(tremolo::tremolo_plugin_assets_zsz ALIAS tremolo_plugin_assets_zsz)
 
+juce_add_binary_data(tremolo_plugin_assets_yb
+  HEADER_NAME
+    "TremoloPluginAssetsYB.h"
+  NAMESPACE
+    tremolo::assets_yb
+  SOURCES
+    assets/YB/YB_pnglist.png
+    assets/YB/tone.png
+)
+
+add_library(tremolo::tremolo_plugin_assets_yb ALIAS tremolo_plugin_assets_yb)
+
+juce_add_binary_data(tremolo_plugin_assets_dan
+  HEADER_NAME
+    "TremoloPluginAssetsDAN.h"
+  NAMESPACE
+    tremolo::assets_dan
+  SOURCES
+    assets/DAN/DAN_pnglist.png
+    assets/DAN/tone.png
+)
+
+add_library(tremolo::tremolo_plugin_assets_dan ALIAS tremolo_plugin_assets_dan)
+
 juce_add_module(tremolo_plugin ALIAS_NAMESPACE tremolo)
 
   # Additional definitions required by all users of this module.
@@ -212,6 +236,8 @@ target_link_libraries(tremolo_plugin INTERFACE tremolo::tremolo_plugin_assets_gg
 target_link_libraries(tremolo_plugin INTERFACE tremolo::tremolo_plugin_assets_wb)
 target_link_libraries(tremolo_plugin INTERFACE tremolo::tremolo_plugin_assets_ds)
 target_link_libraries(tremolo_plugin INTERFACE tremolo::tremolo_plugin_assets_zsz)
+target_link_libraries(tremolo_plugin INTERFACE tremolo::tremolo_plugin_assets_yb)
+target_link_libraries(tremolo_plugin INTERFACE tremolo::tremolo_plugin_assets_dan)
 
 target_link_libraries(
   TremoloCoursePlugin

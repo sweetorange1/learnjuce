@@ -50,4 +50,6 @@ END_JUCE_MODULE_DECLARATION
 #include "include/Tremolo/PluginProcessor.h"
 #include "include/Tremolo/MessageOnClick.h"
 #include "include/Tremolo/PluginEditor.h"
+#include "include/Tremolo/XYSkinAnimator.h"
+#include "include/Tremolo/JjAnimator.h"
 #include "include/Tremolo/SpectrumAnalyser.h"
