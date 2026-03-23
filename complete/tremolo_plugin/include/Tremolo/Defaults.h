@@ -19,7 +19,7 @@ inline constexpr float xyTargetY = 0.38f;
 // XY 控制器布局（像素）：固定尺寸 + 左上角偏移
 inline constexpr int xyControllerWidthPx = 550;
 inline constexpr int xyControllerHeightPx = 550;
-inline constexpr int xyControllerLeftPx = 20;
+inline constexpr int xyControllerLeftPx = 19;
 inline constexpr int xyControllerTopPx = 40;
 
 // XY 控制点（tone.png）绘制尺寸（像素）：以图片中心点作为坐标
@@ -63,23 +63,82 @@ inline constexpr int skinsButtonHeightPx = settingsButtonHeightPx;
 inline constexpr int skinsButtonLeftPx = settingsButtonLeftPx + settingsButtonWidthPx + 8;
 inline constexpr int skinsButtonTopPx = settingsButtonTopPx;
 
-// HCR皮肤：指示灯闪烁时的逐帧动画帧率
-inline constexpr float hcrIndicatorAnimFps = 30.0f;
+// HCR/GGGG皮肤：指示灯闪烁时的逐帧动画每帧时长（秒）
+// 注意：这里配置的是“每帧显示时间”，而不是fps。
+inline constexpr double hcrIndicatorFrameDurationSec = 1.0 / 60.0;
+inline constexpr double ggggIndicatorFrameDurationSec = 1.0 / 60.0;
+inline constexpr double wbIndicatorFrameDurationSec = 1.0 / 60.0;
+inline constexpr double dsIndicatorFrameDurationSec = 1.0 / 60.0;
+inline constexpr double zszIndicatorFrameDurationSec = 1.0 / 20.0;
+
+// “分段播放”类型皮肤：每次触发播放的帧区间配置（含起止帧，inclusive）
+// 说明：
+// - 每次触发按顺序取一个区间播放；用完最后一个区间后从头循环。
+// - fromFrame/toFrame 允许正向或反向（fromFrame > toFrame 表示反向播放）。
+struct SkinTriggerFrameSpan {
+  int fromFrame = 0;
+  int toFrame = 0;
+};
+
+// WB：每次触发播放一段（例如：[(1,32)(32,63)(63,32)(32,1)]）
+// 注意：这里使用0-based帧索引（与sprite sheet裁剪索引一致）。
+inline constexpr std::array<SkinTriggerFrameSpan, 4> wbTriggerFrameProgram = {
+    SkinTriggerFrameSpan{0, 31},
+    SkinTriggerFrameSpan{31, 62},
+    SkinTriggerFrameSpan{62, 31},
+    SkinTriggerFrameSpan{31, 0},
+};
+
+// HCR：一张sprite sheet（22帧），每次触发仅向前播放一段（0->21）
+inline constexpr std::array<SkinTriggerFrameSpan, 1> hcrTriggerFrameProgram = {
+    SkinTriggerFrameSpan{0, 21},
+};
+
+// GGGG：一张sprite sheet（25帧），每次触发播放一段（按配置循环取段）
+inline constexpr std::array<SkinTriggerFrameSpan, 2> ggggTriggerFrameProgram = {
+    SkinTriggerFrameSpan{0, 13},
+    SkinTriggerFrameSpan{13, 24},
+};
+
+// DS：一张sprite sheet（57帧），每次触发播放一段（往复）
+// 分段：前28帧一段、后29帧一段，往复播放 => [0->27, 27->56, 56->27, 27->0]
+inline constexpr std::array<SkinTriggerFrameSpan, 4> dsTriggerFrameProgram = {
+    SkinTriggerFrameSpan{0, 27},
+    SkinTriggerFrameSpan{27, 56},
+    SkinTriggerFrameSpan{56, 27},
+    SkinTriggerFrameSpan{27, 0},
+};
+
+// ZSZ：一张sprite sheet（6帧），每次触发从头到尾播放一次（0->5）
+inline constexpr std::array<SkinTriggerFrameSpan, 1> zszTriggerFrameProgram = {
+    SkinTriggerFrameSpan{0, 5},
+};
+
+// 兼容旧配置（过去用fps表示）：建议新代码改用 *FrameDurationSec
+inline constexpr float hcrIndicatorAnimFps = static_cast<float>(1.0 / hcrIndicatorFrameDurationSec);
 
 // XY皮肤配置：默认皮肤与切换顺序（方便后续扩展多套皮肤）
 // 约定：BT=第一套（assets/BT），HCR=第二套（assets/HCR）
 enum class XYSkinId : int {
   BT = 0,
   HCR = 1,
+  GGGG = 2,
+  WB = 3,
+  DS = 4,
+  ZSZ = 5,
 };
 
 // 默认皮肤（启动时使用）
 inline constexpr XYSkinId xyDefaultSkin = XYSkinId::HCR;
 
 // 皮肤切换顺序（按顺序循环）。新增皮肤时把新枚举追加到这里即可。
-inline constexpr std::array<XYSkinId, 2> xySkinCycleOrder = {
+inline constexpr std::array<XYSkinId, 6> xySkinCycleOrder = {
     XYSkinId::BT,
     XYSkinId::HCR,
+    XYSkinId::GGGG,
+    XYSkinId::WB,
+    XYSkinId::DS,
+    XYSkinId::ZSZ,
 };
 
 // 指示灯布局（像素）：固定尺寸 + 左上角偏移

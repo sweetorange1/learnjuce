@@ -3,6 +3,9 @@
 #include "VolumeMeter.h"
 #include "Defaults.h"
 
+#include <atomic>
+#include <thread>
+
 namespace tremolo {
 
 // 触发源：用于指示灯与XY动画（Audio阈值 / MIDI输入 / 宿主BPM）
@@ -161,6 +164,66 @@ class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
   int hcrFrameIndex{0};
   double hcrFrameTimeAccSec{0.0};
 
+  // HCR皮肤：sprite sheet逐帧动画状态（22帧），底图仍使用001.png
+  juce::Image hcrSpriteSheet;
+  int hcrTriggerStep{+1};
+  int hcrTriggerEndFrame{0};
+
+  // GGGG皮肤：sprite sheet逐帧动画状态（25帧），底图使用第0帧
+  bool ggggFrameAnimActive{false};
+  int ggggFrameIndex{0};
+  double ggggFrameTimeAccSec{0.0};
+  juce::Image ggggSpriteSheet;
+
+  // GGGG皮肤：按 Defaults.h 的 ggggTriggerFrameProgram 分段播放
+  int ggggTriggerProgramIndex{0}; // 下次触发要播放的段索引
+  int ggggTriggerStep{+1};        // 本段播放步进（+1/-1）
+  int ggggTriggerEndFrame{0};     // 本段结束帧（停留帧）
+
+  // WB皮肤：sprite sheet逐帧动画状态（1行×64列，每帧550×550；每次触发播放32帧，遇到边界停留并反向）
+  bool wbFrameAnimActive{false};
+  int wbFrameIndex{0}; // 0..63
+  int wbFrameDir{+1};  // +1=向前(左->右)，-1=向后(右->左)
+  int wbFramesRemaining{0}; // 当前触发还剩多少步（最多32）
+  double wbFrameTimeAccSec{0.0};
+  juce::Image wbSpriteSheet;
+
+  // WB皮肤：按 Defaults.h 的 wbTriggerFrameProgram 分段播放
+  int wbTriggerProgramIndex{0}; // 下次触发要播放的段索引
+  int wbTriggerStep{+1};        // 本段播放步进（+1/-1）
+  int wbTriggerEndFrame{0};     // 本段结束帧（停留帧）
+
+  // DS皮肤：sprite sheet逐帧动画状态（57帧），底图使用第0帧
+  bool dsFrameAnimActive{false};
+  int dsFrameIndex{0};
+  double dsFrameTimeAccSec{0.0};
+  juce::Image dsSpriteSheet;
+
+  // DS皮肤：按 Defaults.h 的 dsTriggerFrameProgram 分段往复播放
+  int dsTriggerProgramIndex{0}; // 下次触发要播放的段索引
+  int dsTriggerStep{+1};        // 本段播放步进（+1/-1）
+  int dsTriggerEndFrame{0};     // 本段结束帧（停留帧）
+
+  // ZSZ皮肤：sprite sheet逐帧动画状态（6帧），底图使用第0帧
+  bool zszFrameAnimActive{false};
+  int zszFrameIndex{0};
+  double zszFrameTimeAccSec{0.0};
+  juce::Image zszSpriteSheet;
+
+  // ZSZ皮肤：按 Defaults.h 的 zszTriggerFrameProgram 播放（每次触发 0->5 播放一次并停留）
+  int zszTriggerProgramIndex{0}; // 预留：保持与其它皮肤一致
+  int zszTriggerStep{+1};
+  int zszTriggerEndFrame{0};
+
+  // WB皮肤：异步加载sprite sheet（避免切换皮肤时卡顿）
+  std::atomic<bool> wbSpriteSheetLoading{false};
+  std::atomic<bool> wbSpriteSheetLoadCancel{false};
+  std::thread wbSpriteSheetLoadThread;
+
+  // UI：切换皮肤加载提示
+  bool skinLoadingOverlayVisible{false};
+  juce::String skinLoadingOverlayText{"Loading skin..."};
+
   // 图片动画相关变量
   bool isAnimating = false;
   bool isMovingUp = true;
@@ -186,6 +249,23 @@ class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
   void updateXYSkinVisualsForIndicator(bool shouldFlash, bool retriggered, double dtSec);
   void startHcrFrameAnimation();
   void stopHcrFrameAnimation();
+  void setHcrFrameIndex(int newIndex);
+
+  void startGgggFrameAnimation();
+  void stopGgggFrameAnimation();
+  void setGgggFrameIndex(int newIndex);
+
+  void startDsFrameAnimation();
+  void stopDsFrameAnimation();
+  void setDsFrameIndex(int newIndex);
+
+  void startZszFrameAnimation();
+  void stopZszFrameAnimation();
+  void setZszFrameIndex(int newIndex);
+
+  void stopWbFrameAnimation();
+  void setWbFrameIndex(int newIndex);
+  void beginLoadWbSpriteSheetAsync();
 
   XYController xyController; // XY控制器组件
   MessageOnClick about;

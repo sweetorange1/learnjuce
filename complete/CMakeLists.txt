@@ -97,8 +97,7 @@ juce_add_plugin(
   IS_SYNTH
     FALSE
   NEEDS_MIDI_INPUT
--    FALSE
-+    TRUE
+    TRUE
   NEEDS_MIDI_OUTPUT
     FALSE
   VST3_AUTO_MANIFEST
@@ -128,17 +127,61 @@ juce_add_binary_data(tremolo_plugin_assets
     assets/BT/jj.png
     assets/BT/tone.png
     assets/HCR/001.png
-    assets/HCR/002.png
-    assets/HCR/003.png
-    assets/HCR/004.png
-    assets/HCR/005.png
-    assets/HCR/006.png
+    assets/HCR/HCR_pnglist.png
     assets/HCR/tone.png
     assets/Inter-Bold.ttf
     assets/Inter-Medium.ttf
 )
 
 add_library(tremolo::tremolo_plugin_assets ALIAS tremolo_plugin_assets)
+
+juce_add_binary_data(tremolo_plugin_assets_gggg
+  HEADER_NAME
+    "TremoloPluginAssetsGGGG.h"
+  NAMESPACE
+    tremolo::assets_gggg
+  SOURCES
+    assets/GGGG/GGGG_pnglist.png
+    assets/GGGG/tone.png
+)
+
+add_library(tremolo::tremolo_plugin_assets_gggg ALIAS tremolo_plugin_assets_gggg)
+
+juce_add_binary_data(tremolo_plugin_assets_wb
+  HEADER_NAME
+    "TremoloPluginAssetsWB.h"
+  NAMESPACE
+    tremolo::assets_wb
+  SOURCES
+    assets/WB/WB_pnglist.png
+    assets/WB/tone.png
+)
+
+add_library(tremolo::tremolo_plugin_assets_wb ALIAS tremolo_plugin_assets_wb)
+
+juce_add_binary_data(tremolo_plugin_assets_ds
+  HEADER_NAME
+    "TremoloPluginAssetsDS.h"
+  NAMESPACE
+    tremolo::assets_ds
+  SOURCES
+    assets/DS/DS_pnglist.png
+    assets/DS/tone.png
+)
+
+add_library(tremolo::tremolo_plugin_assets_ds ALIAS tremolo_plugin_assets_ds)
+
+juce_add_binary_data(tremolo_plugin_assets_zsz
+  HEADER_NAME
+    "TremoloPluginAssetsZSZ.h"
+  NAMESPACE
+    tremolo::assets_zsz
+  SOURCES
+    assets/ZSZ/ZSZ_pnglist.png
+    assets/ZSZ/tone.png
+)
+
+add_library(tremolo::tremolo_plugin_assets_zsz ALIAS tremolo_plugin_assets_zsz)
 
 juce_add_module(tremolo_plugin ALIAS_NAMESPACE tremolo)
 
@@ -165,6 +208,10 @@ else()
 endif()
 
 target_link_libraries(tremolo_plugin INTERFACE tremolo::tremolo_plugin_assets)
+target_link_libraries(tremolo_plugin INTERFACE tremolo::tremolo_plugin_assets_gggg)
+target_link_libraries(tremolo_plugin INTERFACE tremolo::tremolo_plugin_assets_wb)
+target_link_libraries(tremolo_plugin INTERFACE tremolo::tremolo_plugin_assets_ds)
+target_link_libraries(tremolo_plugin INTERFACE tremolo::tremolo_plugin_assets_zsz)
 
 target_link_libraries(
   TremoloCoursePlugin

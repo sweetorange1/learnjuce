@@ -1,8 +1,15 @@
 #include "../include/Tremolo/PluginEditor.h"
 #include "../include/Tremolo/Defaults.h"
 #include <TremoloPluginAssets.h>
+#include <TremoloPluginAssetsGGGG.h>
+#include <TremoloPluginAssetsWB.h>
+#include <TremoloPluginAssetsDS.h>
+#include <TremoloPluginAssetsZSZ.h>
 
 #include <array>
+#include <atomic>
+#include <limits>
+#include <thread>
 
 // tremolo命名空间：C++中使用命名空间来组织代码，避免命名冲突
 namespace tremolo {
@@ -67,16 +74,39 @@ const BinaryImage kBtBase{assets::bt_png, assets::bt_pngSize};
 const BinaryImage kBtJj{assets::jj_png, assets::jj_pngSize};
 const BinaryImage kBtTone{assets::tone_png, assets::tone_pngSize};
 
-// HCR：001为底图；002-006为指示灯闪烁时的逐帧动画
+// HCR：001为底图；HCR_pnglist.png为指示灯闪烁时的sprite sheet（22帧）
 const BinaryImage kHcrBase{assets::_001_png, assets::_001_pngSize};
-const std::array<BinaryImage, 5> kHcrFlashFrames{{
-    {assets::_002_png, assets::_002_pngSize},
-    {assets::_003_png, assets::_003_pngSize},
-    {assets::_004_png, assets::_004_pngSize},
-    {assets::_005_png, assets::_005_pngSize},
-    {assets::_006_png, assets::_006_pngSize},
-}};
+const BinaryImage kHcrSpriteSheet{assets::HCR_pnglist_png, assets::HCR_pnglist_pngSize};
 const BinaryImage kHcrTone{assets::tone_png2, assets::tone_png2Size};
+
+// GGGG：GGGG_pnglist.png为底图/指示灯共用的sprite sheet（25帧）
+const BinaryImage kGgggSpriteSheet{assets_gggg::GGGG_pnglist_png, assets_gggg::GGGG_pnglist_pngSize};
+const BinaryImage kGgggTone{assets_gggg::tone_png, assets_gggg::tone_pngSize};
+
+// WB：一张sprite sheet（1行×64列，每帧550×550），指示灯闪烁时按规则切换显示帧
+const BinaryImage kWbSpriteSheet{assets_wb::WB_pnglist_png, assets_wb::WB_pnglist_pngSize};
+const BinaryImage kWbTone{assets_wb::tone_png, assets_wb::tone_pngSize};
+
+// DS：DS_pnglist.png为底图/指示灯共用的sprite sheet（57帧）
+const BinaryImage kDsSpriteSheet{assets_ds::DS_pnglist_png, assets_ds::DS_pnglist_pngSize};
+const BinaryImage kDsTone{assets_ds::tone_png, assets_ds::tone_pngSize};
+
+// ZSZ：ZSZ_pnglist.png为底图/指示灯共用的sprite sheet（6帧）
+const BinaryImage kZszSpriteSheet{assets_zsz::ZSZ_pnglist_png, assets_zsz::ZSZ_pnglist_pngSize};
+const BinaryImage kZszTone{assets_zsz::tone_png, assets_zsz::tone_pngSize};
+
+constexpr int kWbFrameWidthPx = 550;
+constexpr int kWbFrameHeightPx = 550;
+constexpr int kWbFrameCount = 64;
+constexpr int kWbFramesPerTrigger = 32;
+
+constexpr int kDsFrameWidthPx = 550;
+constexpr int kDsFrameHeightPx = 550;
+constexpr int kDsFrameCount = 57;
+
+constexpr int kZszFrameWidthPx = 550;
+constexpr int kZszFrameHeightPx = 550;
+constexpr int kZszFrameCount = 6;
 }  // namespace
 
 // SettingsPanel类的实现
@@ -726,6 +756,12 @@ PluginEditor::PluginEditor(PluginProcessor& p)
 
 // PluginEditor类的析构函数：在对象销毁时自动调用
 PluginEditor::~PluginEditor() {
+  // 取消并等待WB sprite sheet异步加载线程结束（避免std::terminate）
+  wbSpriteSheetLoadCancel.store(true);
+  if (wbSpriteSheetLoadThread.joinable()) {
+    wbSpriteSheetLoadThread.join();
+  }
+
   // 移除自定义外观设置，恢复默认外观
   setLookAndFeel(nullptr);
 }
@@ -743,6 +779,18 @@ void PluginEditor::setXYSkin(tremolo::defaults::XYSkinId newSkin) {
     isAnimating = false;
     animationProgress = 0.0f;
     stopHcrFrameAnimation();
+    stopGgggFrameAnimation();
+    stopDsFrameAnimation();
+    stopZszFrameAnimation();
+    stopWbFrameAnimation();
+
+    // 皮肤加载提示：默认隐藏；仅WB异步加载时显示
+    skinLoadingOverlayVisible = false;
+
+    // 如果正在异步加载WB资源，而这次切走WB，则取消加载
+    if (newSkin != tremolo::defaults::XYSkinId::WB) {
+        wbSpriteSheetLoadCancel.store(true);
+    }
 
     // 统一恢复到“未闪烁”状态的基础底图
     if (currentXYSkin == tremolo::defaults::XYSkinId::BT) {
@@ -762,7 +810,7 @@ void PluginEditor::setXYSkin(tremolo::defaults::XYSkinId newSkin) {
         if (tone.isValid()) {
             toneImage.setImage(tone);
         }
-    } else {
+    } else if (currentXYSkin == tremolo::defaults::XYSkinId::HCR) {
         const auto base = loadImageFromBinary(kHcrBase);
         if (base.isValid()) {
             btImage.setImage(base);
@@ -776,6 +824,87 @@ void PluginEditor::setXYSkin(tremolo::defaults::XYSkinId newSkin) {
         if (tone.isValid()) {
             toneImage.setImage(tone);
         }
+    } else if (currentXYSkin == tremolo::defaults::XYSkinId::GGGG) {
+        // GGGG：使用图集第0帧作为底图
+        if (!ggggSpriteSheet.isValid()) {
+            ggggSpriteSheet = loadImageFromBinary(kGgggSpriteSheet);
+        }
+
+        stopGgggFrameAnimation();
+        if (ggggSpriteSheet.isValid()) {
+            setGgggFrameIndex(0);
+        }
+
+        // GGGG皮肤不使用jj上下往复动画
+        jjImage.setVisible(false);
+        jjClipper.setVisible(false);
+
+        const auto tone = loadImageFromBinary(kGgggTone);
+        if (tone.isValid()) {
+            toneImage.setImage(tone);
+        }
+    } else if (currentXYSkin == tremolo::defaults::XYSkinId::DS) {
+        // DS：使用图集第0帧作为底图
+        dsTriggerProgramIndex = 0;
+
+        if (!dsSpriteSheet.isValid()) {
+            dsSpriteSheet = loadImageFromBinary(kDsSpriteSheet);
+        }
+
+        stopDsFrameAnimation();
+        if (dsSpriteSheet.isValid()) {
+            setDsFrameIndex(0);
+        }
+
+        // DS皮肤不使用jj上下往复动画
+        jjImage.setVisible(false);
+        jjClipper.setVisible(false);
+
+        const auto tone = loadImageFromBinary(kDsTone);
+        if (tone.isValid()) {
+            toneImage.setImage(tone);
+        }
+    } else if (currentXYSkin == tremolo::defaults::XYSkinId::ZSZ) {
+        // ZSZ：使用图集第0帧作为底图
+        zszTriggerProgramIndex = 0;
+
+        if (!zszSpriteSheet.isValid()) {
+            zszSpriteSheet = loadImageFromBinary(kZszSpriteSheet);
+        }
+
+        stopZszFrameAnimation();
+        if (zszSpriteSheet.isValid()) {
+            setZszFrameIndex(0);
+        }
+
+        // ZSZ皮肤不使用jj上下往复动画
+        jjImage.setVisible(false);
+        jjClipper.setVisible(false);
+
+        const auto tone = loadImageFromBinary(kZszTone);
+        if (tone.isValid()) {
+            toneImage.setImage(tone);
+        }
+    } else {
+        // WB
+
+        // 每次切到WB都从配置的第一段开始计数
+        wbTriggerProgramIndex = 0;
+
+        // 切换到WB时，使用异步加载避免界面卡顿，并显示loading提示。
+        beginLoadWbSpriteSheetAsync();
+        if (wbSpriteSheet.isValid()) {
+            setWbFrameIndex(0);
+        }
+
+        // WB皮肤不使用jj上下往复动画
+        jjImage.setVisible(false);
+        jjClipper.setVisible(false);
+
+        const auto tone = loadImageFromBinary(kWbTone);
+        if (tone.isValid()) {
+            toneImage.setImage(tone);
+        }
     }
 
     // 强制刷新布局与绘制
@@ -784,23 +913,327 @@ void PluginEditor::setXYSkin(tremolo::defaults::XYSkinId newSkin) {
 }
 
 void PluginEditor::startHcrFrameAnimation() {
+    // HCR：每次触发严格按 Defaults.h 的 hcrTriggerFrameProgram 播放（目前仅一段 0->21）
+    if (!hcrSpriteSheet.isValid()) {
+        hcrSpriteSheet = loadImageFromBinary(kHcrSpriteSheet);
+        if (!hcrSpriteSheet.isValid()) {
+            return;
+        }
+    }
+
+    const auto& program = tremolo::defaults::hcrTriggerFrameProgram;
+    const auto seg = program[0];
+
+    const int from = seg.fromFrame;
+    const int to = seg.toFrame;
+
+    hcrTriggerStep = (from <= to) ? +1 : -1;
+    hcrTriggerEndFrame = to;
+
     hcrFrameAnimActive = true;
-    hcrFrameIndex = 0;
+    hcrFrameIndex = from;
     hcrFrameTimeAccSec = 0.0;
 
-    const auto frame = loadImageFromBinary(kHcrFlashFrames[0]);
-    if (frame.isValid()) {
-        btImage.setImage(frame);
-    }
+    setHcrFrameIndex(from);
 }
 
 void PluginEditor::stopHcrFrameAnimation() {
     hcrFrameAnimActive = false;
-    hcrFrameIndex = 0;
     hcrFrameTimeAccSec = 0.0;
+
+    // 停留在段末帧，不在这里回到底图001.png
+    hcrTriggerStep = +1;
+    hcrTriggerEndFrame = hcrFrameIndex;
+}
+
+void PluginEditor::setHcrFrameIndex(int newIndex) {
+    if (!hcrSpriteSheet.isValid()) {
+        return;
+    }
+
+    // HCR图集：与XY区域一致（550×550），横向22帧
+    constexpr int kHcrFrameWidthPx = 550;
+    constexpr int kHcrFrameHeightPx = 550;
+    constexpr int kHcrFrameCount = 22;
+
+    hcrFrameIndex = juce::jlimit(0, kHcrFrameCount - 1, newIndex);
+
+    const int x = hcrFrameIndex * kHcrFrameWidthPx;
+    const auto clipped = hcrSpriteSheet.getClippedImage(
+        juce::Rectangle<int>{x, 0, kHcrFrameWidthPx, kHcrFrameHeightPx});
+
+    if (clipped.isValid()) {
+        btImage.setImage(clipped);
+    }
+}
+
+void PluginEditor::startGgggFrameAnimation() {
+    // GGGG：每次触发严格按 Defaults.h 的 ggggTriggerFrameProgram 播放一段，并在段末帧停留
+    if (!ggggSpriteSheet.isValid()) {
+        ggggSpriteSheet = loadImageFromBinary(kGgggSpriteSheet);
+        if (!ggggSpriteSheet.isValid()) {
+            return;
+        }
+    }
+
+    const auto& program = tremolo::defaults::ggggTriggerFrameProgram;
+    if (program.empty()) {
+        return;
+    }
+
+    constexpr int kGgggFrameCount = 25;
+
+    const int segIndex = juce::jlimit(0, static_cast<int>(program.size()) - 1, ggggTriggerProgramIndex);
+    const auto seg = program[static_cast<size_t>(segIndex)];
+
+    const int from = juce::jlimit(0, kGgggFrameCount - 1, seg.fromFrame);
+    const int to = juce::jlimit(0, kGgggFrameCount - 1, seg.toFrame);
+
+    ggggTriggerStep = (from <= to) ? +1 : -1;
+    ggggTriggerEndFrame = to;
+
+    ggggFrameAnimActive = true;
+    ggggFrameIndex = from;
+    ggggFrameTimeAccSec = 0.0;
+
+    setGgggFrameIndex(from);
+
+    // 下一次触发播放下一段
+    ggggTriggerProgramIndex = (segIndex + 1) % static_cast<int>(program.size());
+}
+
+void PluginEditor::stopGgggFrameAnimation() {
+    ggggFrameAnimActive = false;
+    ggggFrameTimeAccSec = 0.0;
+
+    // 停留在段末帧，不在这里强制回到第0帧
+    ggggTriggerStep = +1;
+    ggggTriggerEndFrame = ggggFrameIndex;
+}
+
+void PluginEditor::setGgggFrameIndex(int newIndex) {
+    if (!ggggSpriteSheet.isValid()) {
+        return;
+    }
+
+    // GGGG图集：与XY区域一致（550×550），横向25帧
+    constexpr int kGgggFrameWidthPx = 550;
+    constexpr int kGgggFrameHeightPx = 550;
+    constexpr int kGgggFrameCount = 25;
+
+    ggggFrameIndex = juce::jlimit(0, kGgggFrameCount - 1, newIndex);
+
+    const int x = ggggFrameIndex * kGgggFrameWidthPx;
+    const auto clipped = ggggSpriteSheet.getClippedImage(
+        juce::Rectangle<int>{x, 0, kGgggFrameWidthPx, kGgggFrameHeightPx});
+
+    if (clipped.isValid()) {
+        btImage.setImage(clipped);
+    }
+}
+
+void PluginEditor::startDsFrameAnimation() {
+    // DS：每次触发严格按 Defaults.h 的 dsTriggerFrameProgram 播放一段，并在段末帧停留
+    if (!dsSpriteSheet.isValid()) {
+        dsSpriteSheet = loadImageFromBinary(kDsSpriteSheet);
+        if (!dsSpriteSheet.isValid()) {
+            return;
+        }
+    }
+
+    const auto& program = tremolo::defaults::dsTriggerFrameProgram;
+    if (program.empty()) {
+        return;
+    }
+
+    const int segIndex = juce::jlimit(0, static_cast<int>(program.size()) - 1, dsTriggerProgramIndex);
+    const auto seg = program[static_cast<size_t>(segIndex)];
+
+    const int from = juce::jlimit(0, kDsFrameCount - 1, seg.fromFrame);
+    const int to = juce::jlimit(0, kDsFrameCount - 1, seg.toFrame);
+
+    dsTriggerStep = (from <= to) ? +1 : -1;
+    dsTriggerEndFrame = to;
+
+    dsFrameAnimActive = true;
+    dsFrameIndex = from;
+    dsFrameTimeAccSec = 0.0;
+
+    setDsFrameIndex(from);
+
+    // 下一次触发播放下一段
+    dsTriggerProgramIndex = (segIndex + 1) % static_cast<int>(program.size());
+}
+
+void PluginEditor::stopDsFrameAnimation() {
+    dsFrameAnimActive = false;
+    dsFrameTimeAccSec = 0.0;
+
+    // 停留在段末帧，不在这里强制回到第0帧
+    dsTriggerStep = +1;
+    dsTriggerEndFrame = dsFrameIndex;
+}
+
+void PluginEditor::setDsFrameIndex(int newIndex) {
+    if (!dsSpriteSheet.isValid()) {
+        return;
+    }
+
+    dsFrameIndex = juce::jlimit(0, kDsFrameCount - 1, newIndex);
+
+    const int x = dsFrameIndex * kDsFrameWidthPx;
+    const auto clipped = dsSpriteSheet.getClippedImage(
+        juce::Rectangle<int>{x, 0, kDsFrameWidthPx, kDsFrameHeightPx});
+
+    if (clipped.isValid()) {
+        btImage.setImage(clipped);
+    }
+}
+
+void PluginEditor::startZszFrameAnimation() {
+    // ZSZ：每次触发严格按 Defaults.h 的 zszTriggerFrameProgram 播放（0->5），并在段末帧停留
+    if (!zszSpriteSheet.isValid()) {
+        zszSpriteSheet = loadImageFromBinary(kZszSpriteSheet);
+        if (!zszSpriteSheet.isValid()) {
+            return;
+        }
+    }
+
+    const auto& program = tremolo::defaults::zszTriggerFrameProgram;
+    if (program.empty()) {
+        return;
+    }
+
+    // 目前仅一段，但仍保留“program index”结构，方便未来扩展
+    const int segIndex = juce::jlimit(0, static_cast<int>(program.size()) - 1, zszTriggerProgramIndex);
+    const auto seg = program[static_cast<size_t>(segIndex)];
+
+    const int from = juce::jlimit(0, kZszFrameCount - 1, seg.fromFrame);
+    const int to = juce::jlimit(0, kZszFrameCount - 1, seg.toFrame);
+
+    zszTriggerStep = (from <= to) ? +1 : -1;
+    zszTriggerEndFrame = to;
+
+    zszFrameAnimActive = true;
+    zszFrameIndex = from;
+    zszFrameTimeAccSec = 0.0;
+
+    setZszFrameIndex(from);
+
+    // 下一次触发播放下一段（目前等价于一直为0）
+    zszTriggerProgramIndex = (segIndex + 1) % static_cast<int>(program.size());
+}
+
+void PluginEditor::stopZszFrameAnimation() {
+    zszFrameAnimActive = false;
+    zszFrameTimeAccSec = 0.0;
+
+    // 停留在段末帧，不在这里强制回到第0帧
+    zszTriggerStep = +1;
+    zszTriggerEndFrame = zszFrameIndex;
+}
+
+void PluginEditor::setZszFrameIndex(int newIndex) {
+    if (!zszSpriteSheet.isValid()) {
+        return;
+    }
+
+    zszFrameIndex = juce::jlimit(0, kZszFrameCount - 1, newIndex);
+
+    const int x = zszFrameIndex * kZszFrameWidthPx;
+    const auto clipped = zszSpriteSheet.getClippedImage(
+        juce::Rectangle<int>{x, 0, kZszFrameWidthPx, kZszFrameHeightPx});
+
+    if (clipped.isValid()) {
+        btImage.setImage(clipped);
+    }
+}
+
+void PluginEditor::stopWbFrameAnimation() {
+    wbFrameAnimActive = false;
+    wbFramesRemaining = 0;
+    wbFrameTimeAccSec = 0.0;
+
+    // 本次分段播放结束后，保持停留在“段末帧”，不在这里改wbFrameIndex。
+    wbTriggerStep = +1;
+    wbTriggerEndFrame = wbFrameIndex;
+}
+
+void PluginEditor::setWbFrameIndex(int newIndex) {
+    if (!wbSpriteSheet.isValid()) {
+        return;
+    }
+
+    wbFrameIndex = juce::jlimit(0, kWbFrameCount - 1, newIndex);
+
+    const int x = wbFrameIndex * kWbFrameWidthPx;
+    const auto clipped = wbSpriteSheet.getClippedImage(
+        juce::Rectangle<int>{x, 0, kWbFrameWidthPx, kWbFrameHeightPx});
+
+    if (clipped.isValid()) {
+        btImage.setImage(clipped);
+    }
+}
+
+void PluginEditor::beginLoadWbSpriteSheetAsync() {
+    // 已经有有效图片则无需加载
+    if (wbSpriteSheet.isValid()) {
+        skinLoadingOverlayVisible = false;
+        return;
+    }
+
+    // 如果已有线程在跑，就不重复启动，但要确保loading提示可见
+    if (wbSpriteSheetLoading.load()) {
+        skinLoadingOverlayVisible = true;
+        skinLoadingOverlayText = "Loading WB skin...";
+        repaint();
+        return;
+    }
+
+    wbSpriteSheetLoading.store(true);
+    wbSpriteSheetLoadCancel.store(false);
+
+    skinLoadingOverlayVisible = true;
+    skinLoadingOverlayText = "Loading WB skin...";
+    repaint();
+
+    // 若之前线程对象还joinable（理论上不应发生），先join
+    if (wbSpriteSheetLoadThread.joinable()) {
+        wbSpriteSheetLoadCancel.store(true);
+        wbSpriteSheetLoadThread.join();
+        wbSpriteSheetLoadCancel.store(false);
+    }
+
+    wbSpriteSheetLoadThread = std::thread([this]() {
+        // 注意：ImageCache::getFromMemory 通常线程安全，但具体依赖JUCE实现；这里仍尽量把UI更新放回消息线程。
+        auto img = loadImageFromBinary(kWbSpriteSheet);
+
+        if (wbSpriteSheetLoadCancel.load()) {
+            return;
+        }
+
+        juce::MessageManager::callAsync([this, img]() mutable {
+            if (wbSpriteSheetLoadCancel.load()) {
+                return;
+            }
+
+            wbSpriteSheet = img;
+            wbSpriteSheetLoading.store(false);
+            skinLoadingOverlayVisible = false;
+
+            if (wbSpriteSheet.isValid()) {
+                // 切到WB后默认显示第0帧（或保持现有帧索引也可以，这里用0帧更直观）
+                setWbFrameIndex(0);
+            }
+
+            resized();
+            repaint();
+        });
+    });
 }
 
 void PluginEditor::updateXYSkinVisualsForIndicator(bool shouldFlash, bool retriggered, double dtSec) {
+
     // 边沿检测：首次亮起，或“重触发”时都视为一次新的触发
     const bool risingEdge = shouldFlash && (!wasIndicatorFlashing || retriggered);
     wasIndicatorFlashing = shouldFlash;
@@ -833,41 +1266,265 @@ void PluginEditor::updateXYSkinVisualsForIndicator(bool shouldFlash, bool retrig
         return;
     }
 
-    // HCR：底图001，闪烁时按帧率顺序显示002..006
-    if (risingEdge) {
-        startHcrFrameAnimation();
-    }
+    if (currentXYSkin == tremolo::defaults::XYSkinId::HCR) {
+        // HCR：底图001；触发时按图集播放 0->21（一轮），播完停留在最后一帧
+        if (risingEdge) {
+            startHcrFrameAnimation();
+        }
 
-    if (!shouldFlash) {
-        // 闪烁结束：恢复到底图001
-        if (hcrFrameAnimActive) {
+        if (!shouldFlash) {
+            // 未闪烁：始终显示底图001（这是默认皮肤，启动就应立即可见）
             const auto base = loadImageFromBinary(kHcrBase);
             if (base.isValid()) {
                 btImage.setImage(base);
             }
             stopHcrFrameAnimation();
+            return;
         }
+
+        if (!hcrFrameAnimActive) {
+            return;
+        }
+
+        const double frameDuration = juce::jmax(1.0e-6, tremolo::defaults::hcrIndicatorFrameDurationSec);
+        hcrFrameTimeAccSec += dtSec;
+
+        while (hcrFrameTimeAccSec >= frameDuration && hcrFrameAnimActive) {
+            hcrFrameTimeAccSec -= frameDuration;
+
+            if (hcrFrameIndex == hcrTriggerEndFrame) {
+                stopHcrFrameAnimation();
+                break;
+            }
+
+            const int prev = hcrFrameIndex;
+            const int candidate = prev + hcrTriggerStep;
+
+            // HCR图集：0..21
+            const int next = juce::jlimit(0, 21, candidate);
+            setHcrFrameIndex(next);
+
+            if (next == prev || next == hcrTriggerEndFrame) {
+                if (next == hcrTriggerEndFrame) {
+                    setHcrFrameIndex(hcrTriggerEndFrame);
+                }
+                stopHcrFrameAnimation();
+                break;
+            }
+        }
+
         return;
     }
 
-    if (!hcrFrameAnimActive) {
+    if (currentXYSkin == tremolo::defaults::XYSkinId::GGGG) {
+        // GGGG：底图使用第0帧；触发时按 Defaults.h 的 ggggTriggerFrameProgram 分段播放，并停留在段末帧
+        if (risingEdge) {
+            startGgggFrameAnimation();
+        }
+
+        if (!shouldFlash) {
+            // 未闪烁：不强制回到第0帧；保持停留在“上一次演出结束帧”
+            stopGgggFrameAnimation();
+            return;
+        }
+
+        if (!ggggFrameAnimActive) {
+            return;
+        }
+
+        const double frameDuration = juce::jmax(1.0e-6, tremolo::defaults::ggggIndicatorFrameDurationSec);
+        ggggFrameTimeAccSec += dtSec;
+
+        while (ggggFrameTimeAccSec >= frameDuration && ggggFrameAnimActive) {
+            ggggFrameTimeAccSec -= frameDuration;
+
+            if (ggggFrameIndex == ggggTriggerEndFrame) {
+                stopGgggFrameAnimation();
+                break;
+            }
+
+            const int prev = ggggFrameIndex;
+            const int candidate = prev + ggggTriggerStep;
+
+            // GGGG图集：0..24
+            const int next = juce::jlimit(0, 24, candidate);
+            setGgggFrameIndex(next);
+
+            if (next == prev || next == ggggTriggerEndFrame) {
+                if (next == ggggTriggerEndFrame) {
+                    setGgggFrameIndex(ggggTriggerEndFrame);
+                }
+                stopGgggFrameAnimation();
+                break;
+            }
+        }
+
         return;
     }
 
-    const auto fps = juce::jmax(1.0, static_cast<double>(tremolo::defaults::hcrIndicatorAnimFps));
-    const double frameDuration = 1.0 / fps;
-    hcrFrameTimeAccSec += dtSec;
-
-    // 一次闪烁只播放一轮（002->006），播完后停在最后一帧
-    while (hcrFrameTimeAccSec >= frameDuration && hcrFrameIndex < static_cast<int>(kHcrFlashFrames.size()) - 1) {
-        hcrFrameTimeAccSec -= frameDuration;
-        ++hcrFrameIndex;
-
-        const auto frame = loadImageFromBinary(kHcrFlashFrames[static_cast<size_t>(hcrFrameIndex)]);
-        if (frame.isValid()) {
-            btImage.setImage(frame);
+    if (currentXYSkin == tremolo::defaults::XYSkinId::DS) {
+        // DS：底图使用第0帧；触发时按 Defaults.h 的 dsTriggerFrameProgram 分段往复播放，并停留在段末帧
+        if (risingEdge) {
+            startDsFrameAnimation();
         }
+
+        if (!shouldFlash) {
+            // 未闪烁：不强制回到第0帧；保持停留在“上一次演出结束帧”
+            stopDsFrameAnimation();
+            return;
+        }
+
+        if (!dsFrameAnimActive) {
+            return;
+        }
+
+        const double frameDuration = juce::jmax(1.0e-6, tremolo::defaults::dsIndicatorFrameDurationSec);
+        dsFrameTimeAccSec += dtSec;
+
+        while (dsFrameTimeAccSec >= frameDuration && dsFrameAnimActive) {
+            dsFrameTimeAccSec -= frameDuration;
+
+            if (dsFrameIndex == dsTriggerEndFrame) {
+                stopDsFrameAnimation();
+                break;
+            }
+
+            const int prev = dsFrameIndex;
+            const int candidate = prev + dsTriggerStep;
+
+            // DS图集：0..56
+            const int next = juce::jlimit(0, kDsFrameCount - 1, candidate);
+            setDsFrameIndex(next);
+
+            if (next == prev || next == dsTriggerEndFrame) {
+                if (next == dsTriggerEndFrame) {
+                    setDsFrameIndex(dsTriggerEndFrame);
+                }
+                stopDsFrameAnimation();
+                break;
+            }
+        }
+
+        return;
     }
+
+    if (currentXYSkin == tremolo::defaults::XYSkinId::ZSZ) {
+        // ZSZ：底图使用第0帧；触发时按 Defaults.h 的 zszTriggerFrameProgram 从头播到尾（0->5）并停留
+        if (risingEdge) {
+            startZszFrameAnimation();
+        }
+
+        if (!shouldFlash) {
+            // 未闪烁：不强制回到第0帧；保持停留在“上一次演出结束帧”
+            stopZszFrameAnimation();
+            return;
+        }
+
+        if (!zszFrameAnimActive) {
+            return;
+        }
+
+        const double frameDuration = juce::jmax(1.0e-6, tremolo::defaults::zszIndicatorFrameDurationSec);
+        zszFrameTimeAccSec += dtSec;
+
+        while (zszFrameTimeAccSec >= frameDuration && zszFrameAnimActive) {
+            zszFrameTimeAccSec -= frameDuration;
+
+            if (zszFrameIndex == zszTriggerEndFrame) {
+                stopZszFrameAnimation();
+                break;
+            }
+
+            const int prev = zszFrameIndex;
+            const int candidate = prev + zszTriggerStep;
+
+            // ZSZ图集：0..5
+            const int next = juce::jlimit(0, kZszFrameCount - 1, candidate);
+            setZszFrameIndex(next);
+
+            if (next == prev || next == zszTriggerEndFrame) {
+                if (next == zszTriggerEndFrame) {
+                    setZszFrameIndex(zszTriggerEndFrame);
+                }
+                stopZszFrameAnimation();
+                break;
+            }
+        }
+
+        return;
+    }
+
+    if (currentXYSkin == tremolo::defaults::XYSkinId::WB) {
+        // WB：sprite sheet（1行×64列），每次触发按 Defaults.h 的 wbTriggerFrameProgram 播放一段，并停留在该段的最后一帧
+        if (risingEdge) {
+            // sprite sheet未准备好则触发异步加载，并保持loading提示
+            if (!wbSpriteSheet.isValid()) {
+                beginLoadWbSpriteSheetAsync();
+                return;
+            }
+
+            const auto& program = tremolo::defaults::wbTriggerFrameProgram;
+            if (program.empty()) {
+                return;
+            }
+
+            const int segIndex = juce::jlimit(0, static_cast<int>(program.size()) - 1, wbTriggerProgramIndex);
+            const auto seg = program[static_cast<size_t>(segIndex)];
+
+            const int from = juce::jlimit(0, kWbFrameCount - 1, seg.fromFrame);
+            const int to = juce::jlimit(0, kWbFrameCount - 1, seg.toFrame);
+
+            wbTriggerStep = (from <= to) ? +1 : -1;
+            wbTriggerEndFrame = to;
+
+            // 每次触发严格从配置的起始帧开始播放
+            setWbFrameIndex(from);
+
+            wbFrameAnimActive = true;
+            wbFramesRemaining = std::numeric_limits<int>::max();
+            wbFrameTimeAccSec = 0.0;
+
+            // 下一次触发播放下一段
+            wbTriggerProgramIndex = (segIndex + 1) % static_cast<int>(program.size());
+        }
+
+        if (!wbFrameAnimActive) {
+            return;
+        }
+
+        const double frameDuration = juce::jmax(1.0e-6, tremolo::defaults::wbIndicatorFrameDurationSec);
+        wbFrameTimeAccSec += dtSec;
+
+        while (wbFrameTimeAccSec >= frameDuration && wbFrameAnimActive) {
+            wbFrameTimeAccSec -= frameDuration;
+
+            // 到达段末帧：停留并停止（完全按照配置中一段动画的最后一帧）
+            if (wbFrameIndex == wbTriggerEndFrame) {
+                stopWbFrameAnimation();
+                break;
+            }
+
+            const int prev = wbFrameIndex;
+            const int candidate = prev + wbTriggerStep;
+            // 安全夹紧：避免配置越界导致崩溃
+            const int next = juce::jlimit(0, kWbFrameCount - 1, candidate);
+
+            setWbFrameIndex(next);
+
+            // 如果因为夹紧导致无法继续前进，也停止
+            if (next == prev || next == wbTriggerEndFrame) {
+                if (next == wbTriggerEndFrame) {
+                    // 确保最后一帧已显示
+                    setWbFrameIndex(wbTriggerEndFrame);
+                }
+                stopWbFrameAnimation();
+                break;
+            }
+        }
+
+        return;
+    }
+
 }
 
 // timerCallback方法：定时器回调函数，每秒调用30次（30fps）
@@ -1004,34 +1661,50 @@ void PluginEditor::paint(juce::Graphics& g) {
 }
 
 void PluginEditor::paintOverChildren(juce::Graphics& g) {
-    if constexpr (!tremolo::defaults::showDebugGainOverlay) {
+    // 1) 调试增益Overlay（可选）
+    if constexpr (tremolo::defaults::showDebugGainOverlay) {
+        auto& audioProcessor = dynamic_cast<PluginProcessor&>(processor);
+        const float x = audioProcessor.getParameterRefs().xValue.get();
+        const float y = audioProcessor.getParameterRefs().yValue.get();
+        const float gainBoost = computeGainBoostForXY(x, y);
+        const float sawWet = computeSawWetForXY(x, y);
+
+        const auto gainText = juce::String{"GAIN x"} + juce::String{gainBoost, 2};
+        const auto wetText = juce::String{"WET "} + juce::String{sawWet * 100.0f, 1} + "%";
+
+        auto area = getLocalBounds().toFloat().reduced(8.0f);
+        auto box = area.removeFromTop(44.0f).removeFromRight(140.0f);
+
+        g.setColour(juce::Colours::black.withAlpha(0.55f));
+        g.fillRoundedRectangle(box, 6.0f);
+
+        g.setColour(juce::Colours::white.withAlpha(0.9f));
+        g.setFont(juce::Font(13.0f, juce::Font::bold));
+
+        auto line1 = box;
+        auto line2 = line1.removeFromBottom(line1.getHeight() * 0.5f);
+        line1 = line1.removeFromTop(line1.getHeight());
+
+        g.drawFittedText(gainText, line1.toNearestInt(), juce::Justification::centred, 1);
+        g.drawFittedText(wetText, line2.toNearestInt(), juce::Justification::centred, 1);
+    }
+
+    // 2) 皮肤加载提示（居中显示）
+    if (!skinLoadingOverlayVisible) {
         return;
     }
 
-    auto& audioProcessor = dynamic_cast<PluginProcessor&>(processor);
-    const float x = audioProcessor.getParameterRefs().xValue.get();
-    const float y = audioProcessor.getParameterRefs().yValue.get();
-    const float gainBoost = computeGainBoostForXY(x, y);
-    const float sawWet = computeSawWetForXY(x, y);
+    auto bounds = getLocalBounds().toFloat();
+    g.setColour(juce::Colours::black.withAlpha(0.45f));
+    g.fillRect(bounds);
 
-    const auto gainText = juce::String{"GAIN x"} + juce::String{gainBoost, 2};
-    const auto wetText = juce::String{"WET "} + juce::String{sawWet * 100.0f, 1} + "%";
+    auto panel = bounds.withSizeKeepingCentre(260.0f, 80.0f);
+    g.setColour(juce::Colours::black.withAlpha(0.65f));
+    g.fillRoundedRectangle(panel, 10.0f);
 
-    auto area = getLocalBounds().toFloat().reduced(8.0f);
-    auto box = area.removeFromTop(44.0f).removeFromRight(140.0f);
-
-    g.setColour(juce::Colours::black.withAlpha(0.55f));
-    g.fillRoundedRectangle(box, 6.0f);
-
-    g.setColour(juce::Colours::white.withAlpha(0.9f));
-    g.setFont(juce::Font(13.0f, juce::Font::bold));
-
-    auto line1 = box;
-    auto line2 = line1.removeFromBottom(line1.getHeight() * 0.5f);
-    line1 = line1.removeFromTop(line1.getHeight());
-
-    g.drawFittedText(gainText, line1.toNearestInt(), juce::Justification::centred, 1);
-    g.drawFittedText(wetText, line2.toNearestInt(), juce::Justification::centred, 1);
+    g.setColour(juce::Colours::white.withAlpha(0.95f));
+    g.setFont(juce::Font(16.0f, juce::Font::bold));
+    g.drawFittedText(skinLoadingOverlayText, panel.toNearestInt(), juce::Justification::centred, 2);
 }
 
 // resized方法：当组件大小改变时自动调用，用于重新布局子组件
