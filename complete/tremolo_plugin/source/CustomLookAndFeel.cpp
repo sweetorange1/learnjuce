@@ -70,9 +70,7 @@ CustomLookAndFeel::CustomLookAndFeel() {
   setColour(juce::Slider::textBoxOutlineColourId, kBorder);
   setColour(juce::Slider::textBoxHighlightColourId, kHighlightBg);
 
-  // used to set the font of the default standalone plugin window
-  getDefaultLookAndFeel().setDefaultSansSerifTypeface(
-      interMedium().getTypeface());
+  // 使用系统默认无衬线字体（避免把大体积字体文件打包进二进制）。
 }
 
 juce::FontOptions CustomLookAndFeel::getSideLabelsFont() {
@@ -231,14 +229,12 @@ void CustomLookAndFeel::drawToggleButton(juce::Graphics& g,
 }
 
 juce::FontOptions CustomLookAndFeel::interMedium() {
-  static const auto result = juce::Typeface::createSystemTypefaceFor(
-      assets::InterMedium_ttf, assets::InterMedium_ttfSize);
-  return juce::FontOptions{result};
+  return juce::FontOptions(juce::Font::getDefaultSansSerifFontName(), 12.0f,
+                           juce::Font::plain);
 }
 
 juce::FontOptions CustomLookAndFeel::interBold() {
-  static const auto result = juce::Typeface::createSystemTypefaceFor(
-      assets::InterBold_ttf, assets::InterBold_ttfSize);
-  return juce::FontOptions{result};
+  return juce::FontOptions(juce::Font::getDefaultSansSerifFontName(), 12.0f,
+                           juce::Font::bold);
 }
 }  // namespace tremolo

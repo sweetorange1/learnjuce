@@ -70,22 +70,22 @@ cpmaddpackage(
 # Adds compiler warning utilities & other.
 include(cmake/CompilerWarnings.cmake)
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+if(CMAKE_SYSTEM_NAME STREQUAL "MemePlug")
   # Sets the Windows VST3 installation location to one
   # that doesn't require elevated permissions
   set_directory_properties(PROPERTIES JUCE_VST3_COPY_DIR "$ENV{LOCALAPPDATA}/Programs/Common/VST3")
 endif()
 
 # Adds a plugin target.
-set(TREMOLO_PLUGIN_NAME "PlugIntoMix")
+set(TREMOLO_PLUGIN_NAME "MemePlug")
 juce_add_plugin(
   TremoloCoursePlugin
   PRODUCT_NAME
     ${TREMOLO_PLUGIN_NAME}
   VERSION
-    1.0.0 # 0 forces AU hosts to always refresh
+    2.0.0 # 0 forces AU hosts to always refresh
   COMPANY_NAME
-    "IIsaac_music"
+    "douyin:iisaac_m1"
   PLUGIN_MANUFACTURER_CODE
     Wfsd
   PLUGIN_CODE
@@ -121,16 +121,11 @@ juce_add_binary_data(tremolo_plugin_assets
     tremolo::assets
   SOURCES
     assets/Background.png
-    assets/Logo.png
     assets/setting.png
-    assets/BT/bt.png
-    assets/BT/jj.png
-    assets/BT/tone.png
+    assets/about.png
     assets/HCR/001.png
     assets/HCR/HCR_pnglist.png
     assets/HCR/tone.png
-    assets/Inter-Bold.ttf
-    assets/Inter-Medium.ttf
 )
 
 add_library(tremolo::tremolo_plugin_assets ALIAS tremolo_plugin_assets)

@@ -60,8 +60,26 @@ inline constexpr int settingsButtonTopPx = 7;
 // skins按钮布局（像素）：位于设置按钮右侧
 inline constexpr int skinsButtonWidthPx = 60;
 inline constexpr int skinsButtonHeightPx = settingsButtonHeightPx;
-inline constexpr int skinsButtonLeftPx = settingsButtonLeftPx + settingsButtonWidthPx + 8;
+inline constexpr int skinsButtonLeftPx = settingsButtonLeftPx + settingsButtonWidthPx * 2 + 8 * 2;
 inline constexpr int skinsButtonTopPx = settingsButtonTopPx;
+
+// about按钮布局（像素）：位于skins按钮右侧
+inline constexpr int aboutButtonWidthPx = settingsButtonWidthPx;
+inline constexpr int aboutButtonHeightPx = settingsButtonHeightPx;
+inline constexpr int aboutButtonLeftPx = settingsButtonLeftPx + settingsButtonWidthPx + 8;
+inline constexpr int aboutButtonTopPx = settingsButtonTopPx;
+
+// hide按钮布局（像素）：右下角（通过右/下边距定位）
+inline constexpr int hideButtonWidthPx = 54;
+inline constexpr int hideButtonHeightPx = 15;
+inline constexpr int hideButtonMarginRightPx = 15;
+inline constexpr int hideButtonMarginBottomPx = 4;
+
+// 缩放倍率按钮布局（像素）：左下角（通过左/下边距定位）
+inline constexpr int scaleButtonWidthPx = 54;
+inline constexpr int scaleButtonHeightPx = 15;
+inline constexpr int scaleButtonMarginLeftPx = 15;
+inline constexpr int scaleButtonMarginBottomPx = 4;
 
 // HCR/GGGG皮肤：指示灯闪烁时的逐帧动画每帧时长（秒）
 // 注意：这里配置的是“每帧显示时间”，而不是fps。

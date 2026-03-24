@@ -123,7 +123,20 @@ class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
    void timerCallback() override;
 
  private:
+  // UI 根容器：通过对该容器设置 AffineTransform，实现整套界面（含动画/控件）的统一缩放
+  juce::Component uiRoot;
+
+  // 离散缩放倍率（0.5x/0.75x/1.0x/1.25x/1.5x）
+  juce::TextButton scaleButton;
+
+  float uiScale{1.0f};
+  int baseEditorWidthPx{700};
+  int baseEditorHeightPx{700};
+  void applyUiScale(float newScale);
+  void updateScaleButtonText();
+
   juce::ImageComponent background;
+
   juce::ImageComponent logo;
 
   // XY控制器视觉与交互分离：
@@ -139,6 +152,12 @@ class PluginEditor : public juce::AudioProcessorEditor, private juce::Timer {
 
   juce::ImageButton settingsButton; // 设置按钮
   juce::TextButton skinsButton;   // skins按钮（切换XY皮肤）
+  juce::ImageButton aboutButton;  // about按钮
+
+  // 右下角：隐藏无关UI（录屏用）
+  juce::TextButton hideButton;
+  bool hideNonEssentialUi{false};
+  void applyHideUiState();
 
   tremolo::defaults::XYSkinId currentXYSkin{tremolo::defaults::xyDefaultSkin};
   bool xySkinInitialized{false};

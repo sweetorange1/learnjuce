@@ -10,6 +10,90 @@ namespace tremolo {
 
 namespace {
 
+class AboutDialogContent final : public juce::Component {
+public:
+    AboutDialogContent() {
+        titleLabel.setText("ABOUT", juce::dontSendNotification);
+        titleLabel.setJustificationType(juce::Justification::centred);
+        titleLabel.setFont(juce::Font(20.0f, juce::Font::bold));
+
+        titleLabel.setColour(juce::Label::textColourId, juce::Colours::red);
+        addAndMakeVisible(titleLabel);
+
+        infoBox.setMultiLine(true, true);
+        infoBox.setReadOnly(true);
+        infoBox.setScrollbarsShown(true);
+        infoBox.setCaretVisible(false);
+        infoBox.setPopupMenuEnabled(true);
+        infoBox.setColour(juce::TextEditor::backgroundColourId, juce::Colours::transparentBlack);
+        infoBox.setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
+        infoBox.setColour(juce::TextEditor::shadowColourId, juce::Colours::transparentBlack);
+        infoBox.setColour(juce::TextEditor::textColourId, juce::Colour(0xFFE6E6E6));
+        infoBox.setFont(juce::Font(14.0f));
+
+        infoBox.setText(
+            "Overview\n"
+            "This plugin is completely free and open-source, released under a custom license that prohibits commercial use. You may use it freely for learning and modification, but you must NOT use this plugin for any commercial purpose (including but not limited to bundling, paid distribution, or integration into commercial products).\n\n"
+            "Feedback & Community\n"
+            "If you have a great meme, a new feature idea, or you found a bug, feel free to contact me~\n\n"
+            "Contact\n\n"
+            "Email: 1454949244l@qq.com\n\n"
+            "License\n"
+            "Custom Non-Commercial License (modified from MIT; commercial use and closed-source redistribution are prohibited).\n",
+            false);
+        addAndMakeVisible(infoBox);
+
+        linkHintLabel.setText("Links (clickable):", juce::dontSendNotification);
+        linkHintLabel.setJustificationType(juce::Justification::centredLeft);
+        linkHintLabel.setColour(juce::Label::textColourId, juce::Colour(0xFFC8C8C8));
+        linkHintLabel.setFont(juce::Font(13.0f));
+
+        addAndMakeVisible(linkHintLabel);
+
+        douyinLink.setButtonText("Douyin: https://www.douyin.com/user/MS4wLjABAAAAiFGHXlMXjD35spKBsmhel6vBNf2GJoBdfqskdyzZJ7E");
+        douyinLink.setURL(juce::URL{"https://www.douyin.com/user/MS4wLjABAAAAiFGHXlMXjD35spKBsmhel6vBNf2GJoBdfqskdyzZJ7E"});
+        douyinLink.setFont(juce::Font(13.0f), true, juce::Justification::centredLeft);
+
+        addAndMakeVisible(douyinLink);
+
+        bilibiliLink.setButtonText("Bilibili: https://space.bilibili.com/2314428");
+        bilibiliLink.setURL(juce::URL{"https://space.bilibili.com/2314428"});
+        bilibiliLink.setFont(juce::Font(13.0f), true, juce::Justification::centredLeft);
+
+        addAndMakeVisible(bilibiliLink);
+
+    }
+
+    void resized() override {
+        auto area = getLocalBounds().reduced(16);
+        titleLabel.setBounds(area.removeFromTop(32));
+
+        area.removeFromTop(8);
+
+        auto linksArea = area.removeFromBottom(76);
+        linkHintLabel.setBounds(linksArea.removeFromTop(18));
+        linksArea.removeFromTop(6);
+
+        auto linkRow1 = linksArea.removeFromTop(24);
+        douyinLink.setBounds(linkRow1);
+        linksArea.removeFromTop(6);
+
+        auto linkRow2 = linksArea.removeFromTop(24);
+        bilibiliLink.setBounds(linkRow2);
+
+        area.removeFromBottom(8);
+        infoBox.setBounds(area);
+    }
+
+private:
+    juce::Label titleLabel;
+
+    juce::TextEditor infoBox;
+    juce::Label linkHintLabel;
+    juce::HyperlinkButton douyinLink;
+    juce::HyperlinkButton bilibiliLink;
+};
+
 inline float computeGainBoostForXY(float x, float y) {
   constexpr float targetX = tremolo::defaults::xyTargetX;
   constexpr float targetY = tremolo::defaults::xyTargetY;
@@ -473,15 +557,45 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   const auto bgImage = juce::ImageCache::getFromMemory(
       assets::Background_png, assets::Background_pngSize);
   background.setImage(bgImage);
-  // 将背景组件添加到界面并使其可见
-  addAndMakeVisible(background);
-
   // 让编辑器尺寸自动跟随背景图实际尺寸（便于替换背景图时无需手动改setSize）
   if (bgImage.isValid() && bgImage.getWidth() > 0 && bgImage.getHeight() > 0) {
-      setSize(bgImage.getWidth(), bgImage.getHeight());
+      baseEditorWidthPx = bgImage.getWidth();
+      baseEditorHeightPx = bgImage.getHeight();
+      setSize(baseEditorWidthPx, baseEditorHeightPx);
   } else {
-      setSize(700, 700);
+      baseEditorWidthPx = 700;
+      baseEditorHeightPx = 700;
+      setSize(baseEditorWidthPx, baseEditorHeightPx);
   }
+
+  // UI 根容器：所有控件/动画都挂在这里，缩放时只缩放这个容器即可
+  addAndMakeVisible(uiRoot);
+
+  // 将背景组件添加到界面并使其可见
+  uiRoot.addAndMakeVisible(background);
+
+  // 左下角倍率按钮：离散缩放（0.5x/0.75x/1.0x/1.25x/1.5x）
+  scaleButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF1E1E1E));
+  scaleButton.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xFF303030));
+  scaleButton.setColour(juce::TextButton::textColourOffId, juce::Colour(0xFFE6E6E6));
+  scaleButton.setColour(juce::TextButton::textColourOnId, juce::Colour(0xFFE6E6E6));
+  updateScaleButtonText();
+  scaleButton.onClick = [this]() {
+      // 点击顺序：1.0 -> 1.25 -> 1.5 -> 0.75 -> 0.5 -> 1.0
+      const float eps = 0.0001f;
+      if (std::abs(uiScale - 1.0f) < eps) {
+          applyUiScale(1.25f);
+      } else if (std::abs(uiScale - 1.25f) < eps) {
+          applyUiScale(1.5f);
+      } else if (std::abs(uiScale - 1.5f) < eps) {
+          applyUiScale(0.75f);
+      } else if (std::abs(uiScale - 0.75f) < eps) {
+          applyUiScale(0.5f);
+      } else {
+          applyUiScale(1.0f);
+      }
+  };
+  uiRoot.addAndMakeVisible(scaleButton);
 
   // 设置按钮：从内存中加载设置图标（BinaryData），避免依赖开发机磁盘路径
   const auto settingsIcon = juce::ImageCache::getFromMemory(assets::setting_png, assets::setting_pngSize);
@@ -511,7 +625,7 @@ PluginEditor::PluginEditor(PluginProcessor& p)
       }
   };
   // 将设置按钮添加到界面
-  addAndMakeVisible(settingsButton);
+  uiRoot.addAndMakeVisible(settingsButton);
 
   // skins按钮：用于切换XY控制器皮肤
   skinsButton.setButtonText("Skins");
@@ -523,15 +637,57 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   skinsButton.onClick = [this]() {
       setXYSkin(nextXYSkin(currentXYSkin));
   };
-  addAndMakeVisible(skinsButton);
+  uiRoot.addAndMakeVisible(skinsButton);
+
+  // about按钮：顶部（图片按钮）
+  const auto aboutIcon = juce::ImageCache::getFromMemory(assets::about_png, assets::about_pngSize);
+  if (aboutIcon.isValid()) {
+      aboutButton.setImages(false, true, true,
+          aboutIcon,
+          1.0f,
+          juce::Colours::transparentBlack,
+          aboutIcon,
+          1.0f,
+          juce::Colours::white.withAlpha(0.3f),
+          aboutIcon,
+          1.0f,
+          juce::Colours::white.withAlpha(0.5f));
+  }
+  aboutButton.onClick = [this]() {
+      juce::DialogWindow::LaunchOptions options;
+      options.dialogTitle = "";
+      options.dialogBackgroundColour = juce::Colours::black.withAlpha(0.92f);
+      options.escapeKeyTriggersCloseButton = true;
+      options.useNativeTitleBar = true;
+      options.resizable = false;
+
+      auto* content = new AboutDialogContent();
+      content->setSize(760, 560);
+      options.content.setOwned(content);
+      options.componentToCentreAround = this;
+      options.launchAsync();
+  };
+  uiRoot.addAndMakeVisible(aboutButton);
+
+  // 右下角 hide 按钮：隐藏无关UI（仅保留XY区域动画用于录屏）
+  hideButton.setButtonText("hide");
+  hideButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF1E1E1E));
+  hideButton.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xFF1E1E1E));
+  hideButton.setColour(juce::TextButton::textColourOffId, juce::Colour(0xFFE6E6E6));
+  hideButton.setColour(juce::TextButton::textColourOnId, juce::Colour(0xFFE6E6E6));
+  hideButton.onClick = [this]() {
+      hideNonEssentialUi = !hideNonEssentialUi;
+      applyHideUiState();
+  };
+  uiRoot.addAndMakeVisible(hideButton);
 
   // 设置指示灯组件
   indicatorLight.setInterceptsMouseClicks(false, false); // 不接收鼠标事件
-  addAndMakeVisible(indicatorLight);
+  uiRoot.addAndMakeVisible(indicatorLight);
 
   // XY 区域容器：内部包含bt底图、jj动画、tone控制点和透明交互层
   xyContainer.setInterceptsMouseClicks(false, true);
-  addAndMakeVisible(xyContainer);
+  uiRoot.addAndMakeVisible(xyContainer);
 
   // bt.png：XY控制器底图（具体内容由皮肤系统决定）
   btImage.setInterceptsMouseClicks(false, false);
@@ -643,7 +799,7 @@ PluginEditor::PluginEditor(PluginProcessor& p)
       [&p](float highpassHz, float lowpassHz) {
           p.setInputFilterFrequencies(highpassHz, lowpassHz);
       });
-  addChildComponent(settingsPanel); // 作为子组件添加，但不立即显示
+  uiRoot.addChildComponent(settingsPanel); // 作为子组件添加，但不立即显示
 
   // JJ动画逻辑已迁移至 JjAnimator（当前默认禁用），此处无需初始化旧状态
 
@@ -691,6 +847,29 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   // editor's size to whatever you need it to be.
 }
 
+void PluginEditor::applyHideUiState() {
+    // 当处于隐藏模式时：关闭设置面板，并隐藏无关组件
+    if (hideNonEssentialUi) {
+        isSettingsPanelVisible = false;
+        settingsPanel.setVisible(false);
+    }
+
+    settingsButton.setVisible(!hideNonEssentialUi);
+    skinsButton.setVisible(!hideNonEssentialUi);
+    aboutButton.setVisible(!hideNonEssentialUi);
+    indicatorLight.setVisible(!hideNonEssentialUi);
+    toneImage.setVisible(!hideNonEssentialUi);
+
+    // 左侧倍率按钮也属于“非必要UI”，hide模式下需要一起隐藏
+    scaleButton.setVisible(!hideNonEssentialUi);
+
+    // 激活状态弱化一点（视觉提示）
+    hideButton.setAlpha(hideNonEssentialUi ? 0.55f : 1.0f);
+
+    resized();
+    repaint();
+}
+
 // PluginEditor类的析构函数：在对象销毁时自动调用
 PluginEditor::~PluginEditor() {
   // 逐帧动画模块内部会负责停止线程与释放资源
@@ -736,7 +915,33 @@ void PluginEditor::setXYSkin(tremolo::defaults::XYSkinId newSkin) {
     repaint();
 }
 
+void PluginEditor::updateScaleButtonText() {
+    // 固定显示一位小数：0.5x / 0.8x / 1.0x / 1.3x / 1.5x
+    // 但你要求的文案是：0.5x / 0.75x / 1.0x / 1.25x / 1.5x
+    auto fmt = [](float v) {
+        if (std::abs(v - 0.75f) < 0.0001f) return juce::String("0.75x");
+        if (std::abs(v - 1.25f) < 0.0001f) return juce::String("1.25x");
+        return juce::String(v, 1) + "x";
+    };
 
+    scaleButton.setButtonText(fmt(uiScale));
+}
+
+void PluginEditor::applyUiScale(float newScale) {
+    // 允许的离散档位：0.5 / 0.75 / 1.0 / 1.25 / 1.5
+    const float clamped = juce::jlimit(0.5f, 1.5f, newScale);
+    uiScale = clamped;
+    updateScaleButtonText();
+
+    // 通过改变编辑器尺寸来保持宿主窗口与内容缩放一致
+    const int w = juce::jmax(1, juce::roundToInt(baseEditorWidthPx * uiScale));
+    const int h = juce::jmax(1, juce::roundToInt(baseEditorHeightPx * uiScale));
+    setSize(w, h);
+
+    // resized() 会被宿主/框架触发；这里主动触发一次以避免闪动
+    resized();
+    repaint();
+}
 
 void PluginEditor::updateXYSkinVisualsForIndicator(bool shouldFlash, bool retriggered, double dtSec) {
 
@@ -883,7 +1088,11 @@ void PluginEditor::paint(juce::Graphics& g) {
 }
 
 void PluginEditor::paintOverChildren(juce::Graphics& g) {
+    juce::Graphics::ScopedSaveState state(g);
+    g.addTransform(juce::AffineTransform::scale(uiScale));
+
     // 1) 调试增益Overlay（可选）
+
     if constexpr (tremolo::defaults::showDebugGainOverlay) {
         auto& audioProcessor = dynamic_cast<PluginProcessor&>(processor);
         const float x = audioProcessor.getParameterRefs().xValue.get();
@@ -894,7 +1103,7 @@ void PluginEditor::paintOverChildren(juce::Graphics& g) {
         const auto gainText = juce::String{"GAIN x"} + juce::String{gainBoost, 2};
         const auto wetText = juce::String{"WET "} + juce::String{sawWet * 100.0f, 1} + "%";
 
-        auto area = getLocalBounds().toFloat().reduced(8.0f);
+        auto area = juce::Rectangle<float>{0.0f, 0.0f, (float)baseEditorWidthPx, (float)baseEditorHeightPx}.reduced(8.0f);
         auto box = area.removeFromTop(44.0f).removeFromRight(140.0f);
 
         g.setColour(juce::Colours::black.withAlpha(0.55f));
@@ -916,7 +1125,7 @@ void PluginEditor::paintOverChildren(juce::Graphics& g) {
         return;
     }
 
-    auto bounds = getLocalBounds().toFloat();
+    auto bounds = juce::Rectangle<float>{0.0f, 0.0f, (float)baseEditorWidthPx, (float)baseEditorHeightPx};
     g.setColour(juce::Colours::black.withAlpha(0.45f));
     g.fillRect(bounds);
 
@@ -932,11 +1141,24 @@ void PluginEditor::paintOverChildren(juce::Graphics& g) {
 // resized方法：当组件大小改变时自动调用，用于重新布局子组件
 void PluginEditor::resized() {
 
-  // 获取组件的本地边界（相对于父组件的坐标和大小）
-  auto bounds = getLocalBounds();
+  // 说明：编辑器实际尺寸 = baseEditorSize * uiScale。
+  // 我们将所有布局都按“基准尺寸(base)”计算，然后让系统把内容整体缩放。
+  auto bounds = juce::Rectangle<int>{0, 0, baseEditorWidthPx, baseEditorHeightPx};
+
+  uiRoot.setBounds(bounds);
+  uiRoot.setTransform(juce::AffineTransform::scale(uiScale));
 
   // 设置背景图片覆盖整个边界
   background.setBounds(bounds);
+
+  // 左下角倍率按钮
+  {
+      scaleButton.setBounds(
+          tremolo::defaults::scaleButtonMarginLeftPx,
+          bounds.getBottom() - tremolo::defaults::scaleButtonHeightPx - tremolo::defaults::scaleButtonMarginBottomPx,
+          tremolo::defaults::scaleButtonWidthPx,
+          tremolo::defaults::scaleButtonHeightPx);
+  }
 
   // 设置设置按钮的位置：固定长宽，通过左上角偏移确定位置
   settingsButton.setBounds(tremolo::defaults::settingsButtonLeftPx,
@@ -949,6 +1171,21 @@ void PluginEditor::resized() {
                         tremolo::defaults::skinsButtonTopPx,
                         tremolo::defaults::skinsButtonWidthPx,
                         tremolo::defaults::skinsButtonHeightPx);
+
+  // about按钮位置：在skins按钮右侧
+  aboutButton.setBounds(tremolo::defaults::aboutButtonLeftPx,
+                        tremolo::defaults::aboutButtonTopPx,
+                        tremolo::defaults::aboutButtonWidthPx,
+                        tremolo::defaults::aboutButtonHeightPx);
+
+  // hide按钮：右下角
+  {
+      hideButton.setBounds(
+          bounds.getRight() - tremolo::defaults::hideButtonWidthPx - tremolo::defaults::hideButtonMarginRightPx,
+          bounds.getBottom() - tremolo::defaults::hideButtonHeightPx - tremolo::defaults::hideButtonMarginBottomPx,
+          tremolo::defaults::hideButtonWidthPx,
+          tremolo::defaults::hideButtonHeightPx);
+  }
 
   // 设置设置面板的位置：覆盖整个界面，但留出边距
   auto settingsPanelBounds = bounds.reduced(50);
@@ -1014,6 +1251,9 @@ void PluginEditor::resized() {
   settingsButton.toFront(false);
   indicatorLight.toFront(false);
   xyContainer.toFront(false);
+  hideButton.toFront(false);
+  scaleButton.toFront(false);
+  aboutButton.toFront(false);
 
   // 设置面板如果可见，永远在最顶层
   if (isSettingsPanelVisible) {
