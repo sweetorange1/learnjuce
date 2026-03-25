@@ -82,7 +82,7 @@ inline constexpr int scaleButtonMarginLeftPx = 15;
 inline constexpr int scaleButtonMarginBottomPx = 4;
 
 // HCR/GGGG皮肤：指示灯闪烁时的逐帧动画每帧时长（秒）
-// 注意：这里配置的是“每帧显示时间”，而不是fps。
+// HCR/GGGG皮肤：指示灯闪烁时的逐帧动画每帧时长（秒）
 inline constexpr double hcrIndicatorFrameDurationSec = 1.0 / 60.0;
 inline constexpr double ggggIndicatorFrameDurationSec = 1.0 / 60.0;
 inline constexpr double wbIndicatorFrameDurationSec = 1.0 / 60.0;
@@ -90,6 +90,8 @@ inline constexpr double dsIndicatorFrameDurationSec = 1.0 / 60.0;
 inline constexpr double zszIndicatorFrameDurationSec = 1.0 / 30.0;
 inline constexpr double ybIndicatorFrameDurationSec = 1.0 / 60.0;
 inline constexpr double danIndicatorFrameDurationSec = 1.0 / 60.0;
+inline constexpr double gzyIndicatorFrameDurationSec = 1.0 / 30.0;
+inline constexpr double kkIndicatorFrameDurationSec = 1.0 / 60.0;
 
 // “分段播放”类型皮肤：每次触发播放的帧区间配置（含起止帧，inclusive）
 // 说明：
@@ -154,6 +156,38 @@ inline constexpr std::array<SkinTriggerFrameSpan, 6> danTriggerFrameProgram = {
     SkinTriggerFrameSpan{24, 0},
 };
 
+// GZY：一张sprite sheet（232帧，0..231），4行×58列，每帧550×550。
+// 每次触发单向向前推进：共16段，从0推进到最后一帧。
+// - "走15帧"表示 to-from = 15（包含起止帧则显示16帧）
+// - "走14帧"表示 to-from = 14（包含起止帧则显示15帧）
+// 这里采用：前7段走15帧（15步），后9段走14帧（14步），刚好到231。
+inline constexpr std::array<SkinTriggerFrameSpan, 16> gzyTriggerFrameProgram = {
+    SkinTriggerFrameSpan{0, 16},
+    SkinTriggerFrameSpan{16, 31},
+    SkinTriggerFrameSpan{31, 46},
+    SkinTriggerFrameSpan{46, 58},
+    SkinTriggerFrameSpan{58, 69},
+    SkinTriggerFrameSpan{69, 84 },
+    SkinTriggerFrameSpan{84, 99},
+    SkinTriggerFrameSpan{99, 114},
+    SkinTriggerFrameSpan{114 , 128},
+    SkinTriggerFrameSpan{128 , 142},
+    SkinTriggerFrameSpan{142, 157},
+    SkinTriggerFrameSpan{157, 174},
+    SkinTriggerFrameSpan{174 ,  185},
+    SkinTriggerFrameSpan{185, 200},
+    SkinTriggerFrameSpan{200 , 214},
+    SkinTriggerFrameSpan{214 , 231},
+};
+
+// KK：一张sprite sheet（帧数待定），每次触发播放一段（往复）
+inline constexpr std::array<SkinTriggerFrameSpan, 4> kkTriggerFrameProgram = {
+    SkinTriggerFrameSpan{0, 15},
+    SkinTriggerFrameSpan{15, 30},
+    SkinTriggerFrameSpan{30, 15},
+    SkinTriggerFrameSpan{15, 0},
+};
+
 // 兼容旧配置（过去用fps表示）：建议新代码改用 *FrameDurationSec
 inline constexpr float hcrIndicatorAnimFps = static_cast<float>(1.0 / hcrIndicatorFrameDurationSec);
 
@@ -168,13 +202,15 @@ enum class XYSkinId : int {
   ZSZ = 5,
   YB = 6,
   DAN = 7,
+  GZY = 8,
+  KK = 9,
 };
 
 // 默认皮肤（启动时使用）
 inline constexpr XYSkinId xyDefaultSkin = XYSkinId::HCR;
 
 // 皮肤切换顺序（按顺序循环）。新增皮肤时把新枚举追加到这里即可。
-inline constexpr std::array<XYSkinId, 7> xySkinCycleOrder = {
+inline constexpr std::array<XYSkinId, 9> xySkinCycleOrder = {
     XYSkinId::HCR,
     XYSkinId::GGGG,
     XYSkinId::WB,
@@ -182,6 +218,8 @@ inline constexpr std::array<XYSkinId, 7> xySkinCycleOrder = {
     XYSkinId::ZSZ,
     XYSkinId::YB,
     XYSkinId::DAN,
+    XYSkinId::GZY,
+    XYSkinId::KK,
 };
 
 // 指示灯布局（像素）：固定尺寸 + 左上角偏移

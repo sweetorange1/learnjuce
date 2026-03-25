@@ -250,11 +250,12 @@ void PluginProcessor::getStateInformation(juce::MemoryBlock& destData) {
   const auto parsingResult = juce::JSON::parse(parametersStream.toString(), parametersJson);
 
   juce::DynamicObject::Ptr root{new juce::DynamicObject()};
-  root->setProperty("__state_version__", 1);
+  root->setProperty("__state_version__", 2);
   root->setProperty("parameters", parsingResult.wasOk() ? parametersJson : juce::var{});
   root->setProperty("midiModeEnabled", midiModeEnabled.load(std::memory_order_relaxed));
   root->setProperty("bpmModeEnabled", bpmModeEnabled.load(std::memory_order_relaxed));
   root->setProperty("bpmDivisionIndex", bpmDivisionIndex.load(std::memory_order_relaxed));
+  root->setProperty("xySkinId", xySkinId.load(std::memory_order_relaxed));
 
   juce::MemoryOutputStream outputStream{destData, true};
   juce::JSON::writeToStream(outputStream, juce::var(root.get()),
@@ -287,6 +288,13 @@ void PluginProcessor::setStateInformation(const void* data, int sizeInBytes) {
       bpmDivisionIndex.store(juce::jlimit(0, tremolo::defaults::bpmDivisionCount - 1, bpmDiv),
                              std::memory_order_relaxed);
 
+      if (obj->hasProperty("xySkinId")) {
+        const auto skinId = static_cast<int>(obj->getProperty("xySkinId"));
+        setXYSkinId(static_cast<tremolo::defaults::XYSkinId>(skinId));
+      } else {
+        setXYSkinId(tremolo::defaults::xyDefaultSkin);
+      }
+
       const auto parametersVar = obj->getProperty("parameters");
       const auto parametersText = juce::JSON::toString(parametersVar);
       juce::MemoryInputStream parametersStream{parametersText.toRawUTF8(),
@@ -308,6 +316,9 @@ void PluginProcessor::setStateInformation(const void* data, int sizeInBytes) {
   if (result.failed()) {
     DBG(result.getErrorMessage());
   }
+
+  // 旧格式里没有UI状态：回退到默认值
+  setXYSkinId(tremolo::defaults::xyDefaultSkin);
 }
 
 // 获取参数引用：返回参数管理对象的引用
@@ -377,6 +388,20 @@ void PluginProcessor::setBpmDivisionIndex(int index) noexcept {
 
 int PluginProcessor::getBpmDivisionIndex() const noexcept {
   return bpmDivisionIndex.load(std::memory_order_relaxed);
+}
+
+void PluginProcessor::setXYSkinId(tremolo::defaults::XYSkinId skin) noexcept {
+  const int minId = static_cast<int>(tremolo::defaults::XYSkinId::BT);
+  const int maxId = static_cast<int>(tremolo::defaults::XYSkinId::GZY);
+  const int v = juce::jlimit(minId, maxId, static_cast<int>(skin));
+  xySkinId.store(v, std::memory_order_relaxed);
+}
+
+tremolo::defaults::XYSkinId PluginProcessor::getXYSkinId() const noexcept {
+  const int minId = static_cast<int>(tremolo::defaults::XYSkinId::BT);
+  const int maxId = static_cast<int>(tremolo::defaults::XYSkinId::GZY);
+  const int v = juce::jlimit(minId, maxId, xySkinId.load(std::memory_order_relaxed));
+  return static_cast<tremolo::defaults::XYSkinId>(v);
 }
 
 void PluginProcessor::setInputFilterFrequencies(float highpassHz,

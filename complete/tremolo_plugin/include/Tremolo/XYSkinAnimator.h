@@ -223,6 +223,28 @@ private:
   void setDanFrameIndex(int newIndex);
   void beginLoadDanSpriteSheetAsync();
   void consumeDanSpriteSheetIfReady();
+
+  // ====== GZY ======
+  bool gzyFrameAnimActive{false};
+  int gzyFrameIndex{0};
+  double gzyFrameTimeAccSec{0.0};
+  juce::Image gzySpriteSheet;
+  int gzyTriggerProgramIndex{0};
+  int gzyTriggerStep{+1};
+  int gzyTriggerEndFrame{0};
+
+  std::atomic<bool> gzySpriteSheetLoading{false};
+  std::atomic<bool> gzySpriteSheetLoadCancel{false};
+  std::atomic<bool> gzySpriteSheetReady{false};
+  std::thread gzySpriteSheetLoadThread;
+  std::mutex gzySpriteSheetMutex;
+  juce::Image gzySpriteSheetStaged;
+
+  void startGzyFrameAnimation();
+  void stopGzyFrameAnimation();
+  void setGzyFrameIndex(int newIndex);
+  void beginLoadGzySpriteSheetAsync();
+  void consumeGzySpriteSheetIfReady();
 };
 
 }  // namespace tremolo

@@ -635,7 +635,10 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   skinsButton.setColour(juce::TextButton::textColourOffId, juce::Colour(0xFFE6E6E6));
   skinsButton.setColour(juce::TextButton::textColourOnId, juce::Colour(0xFFE6E6E6));
   skinsButton.onClick = [this]() {
-      setXYSkin(nextXYSkin(currentXYSkin));
+      auto& p = dynamic_cast<PluginProcessor&>(processor);
+      const auto next = nextXYSkin(currentXYSkin);
+      p.setXYSkinId(next);
+      setXYSkin(next);
   };
   uiRoot.addAndMakeVisible(skinsButton);
 
@@ -715,8 +718,8 @@ PluginEditor::PluginEditor(PluginProcessor& p)
   toneImage.toFront(false);
   xyController.toFront(false);
 
-  // 启动时应用默认皮肤（来自Defaults配置），避免必须点击skins按钮才加载XY资源
-  setXYSkin(tremolo::defaults::xyDefaultSkin);
+  // 启动时应用上次保存的皮肤（由宿主恢复到processor状态）；若无则使用默认值
+  setXYSkin(p.getXYSkinId());
 
   // 初始化设置面板
   settingsPanel.setVisible(false); // 初始状态为隐藏
@@ -884,6 +887,10 @@ void PluginEditor::setXYSkin(tremolo::defaults::XYSkinId newSkin) {
     if (xySkinInitialized && currentXYSkin == newSkin) {
         return;
     }
+
+    // 写入可持久化状态（让宿主保存/恢复）
+    auto& p = dynamic_cast<PluginProcessor&>(processor);
+    p.setXYSkinId(newSkin);
 
     // 首次初始化：绑定视图句柄给动画管理器
     if (!xySkinInitialized) {

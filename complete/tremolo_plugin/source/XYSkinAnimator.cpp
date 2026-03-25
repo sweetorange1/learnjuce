@@ -7,6 +7,8 @@
 #include <TremoloPluginAssetsZSZ.h>
 #include <TremoloPluginAssetsYB.h>
 #include <TremoloPluginAssetsDAN.h>
+#include <TremoloPluginAssetsGZY.h>
+#include <TremoloPluginAssetsKK.h>
 
 #include <array>
 #include <limits>
@@ -52,6 +54,14 @@ const BinaryImage kYbTone{assets_yb::tone_png, assets_yb::tone_pngSize};
 const BinaryImage kDanSpriteSheet{assets_dan::DAN_pnglist_png, assets_dan::DAN_pnglist_pngSize};
 const BinaryImage kDanTone{assets_dan::tone_png, assets_dan::tone_pngSize};
 
+// GZY：GZY_pnglist.png为底图/指示灯共用的sprite sheet（232帧，4行×58列）
+const BinaryImage kGzySpriteSheet{assets_gzy::GZY_pnglist_png, assets_gzy::GZY_pnglist_pngSize};
+const BinaryImage kGzyTone{assets_gzy::tone_png, assets_gzy::tone_pngSize};
+
+// KK：KK_pnglist.png为底图/指示灯共用的sprite sheet（31帧）
+const BinaryImage kkSpriteSheet{assets_kk::KK_pnglist_png, assets_kk::KK_pnglist_pngSize};
+const BinaryImage kkTone{assets_kk::tone_png, assets_kk::tone_pngSize};
+
 constexpr int kWbFrameWidthPx = 550;
 constexpr int kWbFrameHeightPx = 550;
 constexpr int kWbFrameCount = 64;
@@ -71,6 +81,15 @@ constexpr int kYbFrameCount = 54;
 constexpr int kDanFrameWidthPx = 550;
 constexpr int kDanFrameHeightPx = 550;
 constexpr int kDanFrameCount = 77;
+
+constexpr int kGzyFrameWidthPx = 550;
+constexpr int kGzyFrameHeightPx = 550;
+constexpr int kGzyFrameCount = 232;
+constexpr int kGzyFramesPerRow = 58;
+
+constexpr int kkFrameWidthPx = 550;
+constexpr int kkFrameHeightPx = 550;
+constexpr int kkFrameCount = 31;
 
 }  // namespace
 
@@ -120,6 +139,20 @@ void XYSkinAnimator::shutdown() {
   }
   danSpriteSheetLoading.store(false);
   danSpriteSheetReady.store(false);
+
+  gzySpriteSheetLoadCancel.store(true);
+  if (gzySpriteSheetLoadThread.joinable()) {
+    gzySpriteSheetLoadThread.join();
+  }
+  gzySpriteSheetLoading.store(false);
+  gzySpriteSheetReady.store(false);
+
+  kkSpriteSheetLoadCancel.store(true);
+  if (kkSpriteSheetLoadThread.joinable()) {
+    kkSpriteSheetLoadThread.join();
+  }
+  kkSpriteSheetLoading.store(false);
+  kkSpriteSheetReady.store(false);
 }
 
 void XYSkinAnimator::attach(View view) {
@@ -141,6 +174,10 @@ void XYSkinAnimator::setSkin(tremolo::defaults::XYSkinId newSkin) {
   stopYbFrameAnimation();
   // DAN
   stopDanFrameAnimation();
+  // GZY
+  stopGzyFrameAnimation();
+  // KK
+  stopKkFrameAnimation();
 
   // 皮肤加载提示：默认隐藏；异步加载时显示
   skinLoadingOverlayVisible = false;
@@ -163,6 +200,12 @@ void XYSkinAnimator::setSkin(tremolo::defaults::XYSkinId newSkin) {
   }
   if (newSkin != tremolo::defaults::XYSkinId::DAN) {
     danSpriteSheetLoadCancel.store(true);
+  }
+  if (newSkin != tremolo::defaults::XYSkinId::GZY) {
+    gzySpriteSheetLoadCancel.store(true);
+  }
+  if (newSkin != tremolo::defaults::XYSkinId::KK) {
+    kkSpriteSheetLoadCancel.store(true);
   }
 
   // 统一恢复到“未闪烁”状态的基础底图
@@ -284,6 +327,46 @@ void XYSkinAnimator::setSkin(tremolo::defaults::XYSkinId newSkin) {
     if (tone.isValid() && view_.toneImage) {
       view_.toneImage->setImage(tone);
     }
+  } else if (newSkin == tremolo::defaults::XYSkinId::GZY) {
+    gzyTriggerProgramIndex = 0;
+    stopGzyFrameAnimation();
+
+    beginLoadGzySpriteSheetAsync();
+    if (gzySpriteSheet.isValid()) {
+      setGzyFrameIndex(0);
+    }
+
+    if (view_.jjImage) {
+      view_.jjImage->setVisible(false);
+    }
+    if (view_.jjClipper) {
+      view_.jjClipper->setVisible(false);
+    }
+
+    const auto tone = loadImageFromBinary(kGzyTone);
+    if (tone.isValid() && view_.toneImage) {
+      view_.toneImage->setImage(tone);
+    }
+  } else if (newSkin == tremolo::defaults::XYSkinId::KK) {
+    kkTriggerProgramIndex = 0;
+    stopKkFrameAnimation();
+
+    beginLoadKkSpriteSheetAsync();
+    if (kkSpriteSheet.isValid()) {
+      setKkFrameIndex(0);
+    }
+
+    if (view_.jjImage) {
+      view_.jjImage->setVisible(false);
+    }
+    if (view_.jjClipper) {
+      view_.jjClipper->setVisible(false);
+    }
+
+    const auto tone = loadImageFromBinary(kkTone);
+    if (tone.isValid() && view_.toneImage) {
+      view_.toneImage->setImage(tone);
+    }
   } else {
     // WB
     wbTriggerProgramIndex = 0;
@@ -326,6 +409,8 @@ void XYSkinAnimator::tick(tremolo::defaults::XYSkinId currentSkin,
   consumeDsSpriteSheetIfReady();
   consumeZszSpriteSheetIfReady();
   consumeDanSpriteSheetIfReady();
+  consumeGzySpriteSheetIfReady();
+  consumeKkSpriteSheetIfReady();
 
   const bool risingEdge = shouldFlash && (!wasIndicatorFlashing || retriggered);
   wasIndicatorFlashing = shouldFlash;
@@ -529,6 +614,60 @@ void XYSkinAnimator::tick(tremolo::defaults::XYSkinId currentSkin,
                          dtSec,
                          [this](int i) { setDanFrameIndex(i); },
                          [this]() { stopDanFrameAnimation(); });
+    return;
+  }
+
+  if (currentSkin == tremolo::defaults::XYSkinId::GZY) {
+    if (risingEdge) {
+      if (!gzySpriteSheet.isValid()) {
+        beginLoadGzySpriteSheetAsync();
+        return;
+      }
+      startGzyFrameAnimation();
+    }
+
+    if (!gzyFrameAnimActive) {
+      return;
+    }
+
+    advanceFrameAnimation(gzyFrameAnimActive,
+                         gzyFrameIndex,
+                         gzyFrameTimeAccSec,
+                         gzyTriggerStep,
+                         gzyTriggerEndFrame,
+                         0,
+                         kGzyFrameCount - 1,
+                         tremolo::defaults::gzyIndicatorFrameDurationSec,
+                         dtSec,
+                         [this](int i) { setGzyFrameIndex(i); },
+                         [this]() { stopGzyFrameAnimation(); });
+    return;
+  }
+
+  if (currentSkin == tremolo::defaults::XYSkinId::KK) {
+    if (risingEdge) {
+      if (!kkSpriteSheet.isValid()) {
+        beginLoadKkSpriteSheetAsync();
+        return;
+      }
+      startKkFrameAnimation();
+    }
+
+    if (!kkFrameAnimActive) {
+      return;
+    }
+
+    advanceFrameAnimation(kkFrameAnimActive,
+                         kkFrameIndex,
+                         kkFrameTimeAccSec,
+                         kkTriggerStep,
+                         kkTriggerEndFrame,
+                         0,
+                         kkFrameCount - 1,
+                         tremolo::defaults::kkIndicatorFrameDurationSec,
+                         dtSec,
+                         [this](int i) { setKkFrameIndex(i); },
+                         [this]() { stopKkFrameAnimation(); });
     return;
   }
 }
@@ -1384,6 +1523,271 @@ void XYSkinAnimator::consumeDanSpriteSheetIfReady() {
 
   if (danSpriteSheet.isValid()) {
     setDanFrameIndex(0);
+  }
+
+  if (view_.owner) {
+    view_.owner->repaint();
+  }
+}
+
+// ====== GZY ======
+void XYSkinAnimator::stopGzyFrameAnimation() {
+  gzyFrameAnimActive = false;
+  gzyFrameTimeAccSec = 0.0;
+  gzyTriggerStep = +1;
+  gzyTriggerEndFrame = gzyFrameIndex;
+}
+
+void XYSkinAnimator::setGzyFrameIndex(int newIndex) {
+  if (!gzySpriteSheet.isValid() || !view_.btImage) {
+    return;
+  }
+
+  gzyFrameIndex = juce::jlimit(0, kGzyFrameCount - 1, newIndex);
+
+  const int col = gzyFrameIndex % kGzyFramesPerRow;
+  const int row = gzyFrameIndex / kGzyFramesPerRow;
+
+  const int x = col * kGzyFrameWidthPx;
+  const int y = row * kGzyFrameHeightPx;
+
+  const auto clipped = gzySpriteSheet.getClippedImage(
+      juce::Rectangle<int>{x, y, kGzyFrameWidthPx, kGzyFrameHeightPx});
+
+  if (clipped.isValid()) {
+    view_.btImage->setImage(clipped);
+  }
+}
+
+void XYSkinAnimator::startGzyFrameAnimation() {
+  if (!gzySpriteSheet.isValid()) {
+    beginLoadGzySpriteSheetAsync();
+    return;
+  }
+
+  const auto& program = tremolo::defaults::gzyTriggerFrameProgram;
+  if (program.empty()) {
+    return;
+  }
+
+  const int segIndex = juce::jlimit(0, static_cast<int>(program.size()) - 1, gzyTriggerProgramIndex);
+  const auto seg = program[static_cast<size_t>(segIndex)];
+
+  const int from = juce::jlimit(0, kGzyFrameCount - 1, seg.fromFrame);
+  const int to = juce::jlimit(0, kGzyFrameCount - 1, seg.toFrame);
+
+  gzyTriggerStep = (from <= to) ? +1 : -1;
+  gzyTriggerEndFrame = to;
+
+  setGzyFrameIndex(from);
+
+  gzyFrameAnimActive = true;
+  gzyFrameTimeAccSec = 0.0;
+
+  gzyTriggerProgramIndex = (segIndex + 1) % static_cast<int>(program.size());
+}
+
+void XYSkinAnimator::beginLoadGzySpriteSheetAsync() {
+  if (gzySpriteSheet.isValid()) {
+    skinLoadingOverlayVisible = false;
+    return;
+  }
+
+  if (gzySpriteSheetLoading.load()) {
+    skinLoadingOverlayVisible = true;
+    skinLoadingOverlayText = "loading";
+    if (view_.owner) {
+      view_.owner->repaint();
+    }
+    return;
+  }
+
+  gzySpriteSheetLoading.store(true);
+  gzySpriteSheetLoadCancel.store(false);
+
+  skinLoadingOverlayVisible = true;
+  skinLoadingOverlayText = "loading";
+  if (view_.owner) {
+    view_.owner->repaint();
+  }
+
+  if (gzySpriteSheetLoadThread.joinable()) {
+    gzySpriteSheetLoadCancel.store(true);
+    gzySpriteSheetLoadThread.join();
+    gzySpriteSheetLoadCancel.store(false);
+  }
+
+  gzySpriteSheetLoadThread = std::thread([this]() {
+    auto img = loadImageFromBinary(kGzySpriteSheet);
+
+    if (gzySpriteSheetLoadCancel.load()) {
+      gzySpriteSheetLoading.store(false);
+      return;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(gzySpriteSheetMutex);
+      gzySpriteSheetStaged = img;
+    }
+
+    gzySpriteSheetReady.store(true);
+    gzySpriteSheetLoading.store(false);
+  });
+}
+
+void XYSkinAnimator::consumeGzySpriteSheetIfReady() {
+  if (!gzySpriteSheetReady.load()) {
+    return;
+  }
+
+  juce::Image staged;
+  {
+    std::lock_guard<std::mutex> lock(gzySpriteSheetMutex);
+    staged = gzySpriteSheetStaged;
+    gzySpriteSheetStaged = {};
+  }
+
+  gzySpriteSheetReady.store(false);
+
+  if (gzySpriteSheetLoadCancel.load()) {
+    return;
+  }
+
+  gzySpriteSheet = staged;
+  skinLoadingOverlayVisible = false;
+
+  if (gzySpriteSheet.isValid()) {
+    setGzyFrameIndex(0);
+  }
+
+  if (view_.owner) {
+    view_.owner->repaint();
+  }
+  }
+
+// ====== KK ======
+void XYSkinAnimator::stopKkFrameAnimation() {
+  kkFrameAnimActive = false;
+  kkFrameTimeAccSec = 0.0;
+  kkTriggerStep = +1;
+  kkTriggerEndFrame = kkFrameIndex;
+}
+
+void XYSkinAnimator::setKkFrameIndex(int newIndex) {
+  if (!kkSpriteSheet.isValid() || !view_.btImage) {
+    return;
+  }
+
+  kkFrameIndex = juce::jlimit(0, kkFrameCount - 1, newIndex);
+
+  const int x = kkFrameIndex * kkFrameWidthPx;
+  const auto clipped = kkSpriteSheet.getClippedImage(
+      juce::Rectangle<int>{x, 0, kkFrameWidthPx, kkFrameHeightPx});
+
+  if (clipped.isValid()) {
+    view_.btImage->setImage(clipped);
+  }
+}
+
+void XYSkinAnimator::startKkFrameAnimation() {
+  if (!kkSpriteSheet.isValid()) {
+    beginLoadKkSpriteSheetAsync();
+    return;
+  }
+
+  const auto& program = tremolo::defaults::kkTriggerFrameProgram;
+  if (program.empty()) {
+    return;
+  }
+
+  const int segIndex = juce::jlimit(0, static_cast<int>(program.size()) - 1, kkTriggerProgramIndex);
+  const auto seg = program[static_cast<size_t>(segIndex)];
+
+  const int from = juce::jlimit(0, kkFrameCount - 1, seg.fromFrame);
+  const int to = juce::jlimit(0, kkFrameCount - 1, seg.toFrame);
+
+  kkTriggerStep = (from <= to) ? +1 : -1;
+  kkTriggerEndFrame = to;
+
+  setKkFrameIndex(from);
+
+  kkFrameAnimActive = true;
+  kkFrameTimeAccSec = 0.0;
+
+  kkTriggerProgramIndex = (segIndex + 1) % static_cast<int>(program.size());
+}
+
+void XYSkinAnimator::beginLoadKkSpriteSheetAsync() {
+  if (kkSpriteSheet.isValid()) {
+    skinLoadingOverlayVisible = false;
+    return;
+  }
+
+  if (kkSpriteSheetLoading.load()) {
+    skinLoadingOverlayVisible = true;
+    skinLoadingOverlayText = "loading";
+    if (view_.owner) {
+      view_.owner->repaint();
+    }
+    return;
+  }
+
+  kkSpriteSheetLoading.store(true);
+  kkSpriteSheetLoadCancel.store(false);
+
+  skinLoadingOverlayVisible = true;
+  skinLoadingOverlayText = "loading";
+  if (view_.owner) {
+    view_.owner->repaint();
+  }
+
+  if (kkSpriteSheetLoadThread.joinable()) {
+    kkSpriteSheetLoadCancel.store(true);
+    kkSpriteSheetLoadThread.join();
+    kkSpriteSheetLoadCancel.store(false);
+  }
+
+  kkSpriteSheetLoadThread = std::thread([this]() {
+    auto img = loadImageFromBinary(kkSpriteSheet);
+
+    if (kkSpriteSheetLoadCancel.load()) {
+      kkSpriteSheetLoading.store(false);
+      return;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(kkSpriteSheetMutex);
+      kkSpriteSheetStaged = img;
+    }
+
+    kkSpriteSheetReady.store(true);
+    kkSpriteSheetLoading.store(false);
+  });
+}
+
+void XYSkinAnimator::consumeKkSpriteSheetIfReady() {
+  if (!kkSpriteSheetReady.load()) {
+    return;
+  }
+
+  juce::Image staged;
+  {
+    std::lock_guard<std::mutex> lock(kkSpriteSheetMutex);
+    staged = kkSpriteSheetStaged;
+    kkSpriteSheetStaged = {};
+  }
+
+  kkSpriteSheetReady.store(false);
+
+  if (kkSpriteSheetLoadCancel.load()) {
+    return;
+  }
+
+  kkSpriteSheet = staged;
+  skinLoadingOverlayVisible = false;
+
+  if (kkSpriteSheet.isValid()) {
+    setKkFrameIndex(0);
   }
 
   if (view_.owner) {

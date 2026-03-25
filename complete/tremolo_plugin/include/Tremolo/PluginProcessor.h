@@ -3,6 +3,8 @@
 #include <atomic>
 #include <cstdint>
 
+#include "Defaults.h"
+
 namespace tremolo {
 class PluginProcessor : public juce::AudioProcessor {
 public:
@@ -59,6 +61,10 @@ public:
   void setBpmDivisionIndex(int index) noexcept;
   int getBpmDivisionIndex() const noexcept;
 
+  // XY皮肤：当前选择（需要持久化到插件状态）
+  void setXYSkinId(tremolo::defaults::XYSkinId skin) noexcept;
+  tremolo::defaults::XYSkinId getXYSkinId() const noexcept;
+
   /**
    *
    * @param bufferToFill
@@ -109,6 +115,9 @@ private:
   std::atomic<uint64_t> bpmTriggerSequence{0};
   std::atomic<bool> bpmModeEnabled{false};
   std::atomic<int> bpmDivisionIndex{tremolo::defaults::bpmDivisionIndexDefault};
+
+  // XY皮肤：当前选择（需要持久化到插件状态）
+  std::atomic<int> xySkinId{static_cast<int>(tremolo::defaults::xyDefaultSkin)};
 
   // BPM节拍边界跟踪（仅音频线程使用，用于避免每个block都触发）
   bool bpmHasLastStep{false};
