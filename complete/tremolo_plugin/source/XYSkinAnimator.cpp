@@ -50,6 +50,10 @@ const BinaryImage kZszTone{assets_zsz::tone_png, assets_zsz::tone_pngSize};
 const BinaryImage kYbSpriteSheet{assets_yb::YB_pnglist_png, assets_yb::YB_pnglist_pngSize};
 const BinaryImage kYbTone{assets_yb::tone_png, assets_yb::tone_pngSize};
 
+// KK：KK_pnglist.png为底图/指示灯共用的sprite sheet（95帧）
+const BinaryImage kKkSpriteSheet{assets_kk::KK_pnglist_png, assets_kk::KK_pnglist_pngSize};
+const BinaryImage kKkTone{assets_kk::tone_png, assets_kk::tone_pngSize};
+
 // DAN：DAN_pnglist.png为底图/指示灯共用的sprite sheet（77帧）
 const BinaryImage kDanSpriteSheet{assets_dan::DAN_pnglist_png, assets_dan::DAN_pnglist_pngSize};
 const BinaryImage kDanTone{assets_dan::tone_png, assets_dan::tone_pngSize};
@@ -58,9 +62,7 @@ const BinaryImage kDanTone{assets_dan::tone_png, assets_dan::tone_pngSize};
 const BinaryImage kGzySpriteSheet{assets_gzy::GZY_pnglist_png, assets_gzy::GZY_pnglist_pngSize};
 const BinaryImage kGzyTone{assets_gzy::tone_png, assets_gzy::tone_pngSize};
 
-// KK：KK_pnglist.png为底图/指示灯共用的sprite sheet（31帧）
-const BinaryImage kkSpriteSheet{assets_kk::KK_pnglist_png, assets_kk::KK_pnglist_pngSize};
-const BinaryImage kkTone{assets_kk::tone_png, assets_kk::tone_pngSize};
+
 
 constexpr int kWbFrameWidthPx = 550;
 constexpr int kWbFrameHeightPx = 550;
@@ -89,7 +91,7 @@ constexpr int kGzyFramesPerRow = 58;
 
 constexpr int kkFrameWidthPx = 550;
 constexpr int kkFrameHeightPx = 550;
-constexpr int kkFrameCount = 31;
+constexpr int kkFrameCount = 95;
 
 }  // namespace
 
@@ -363,7 +365,7 @@ void XYSkinAnimator::setSkin(tremolo::defaults::XYSkinId newSkin) {
       view_.jjClipper->setVisible(false);
     }
 
-    const auto tone = loadImageFromBinary(kkTone);
+const auto tone = loadImageFromBinary(kKkTone);
     if (tone.isValid() && view_.toneImage) {
       view_.toneImage->setImage(tone);
     }
@@ -1748,7 +1750,7 @@ void XYSkinAnimator::beginLoadKkSpriteSheetAsync() {
   }
 
   kkSpriteSheetLoadThread = std::thread([this]() {
-    auto img = loadImageFromBinary(kkSpriteSheet);
+    auto img = loadImageFromBinary(kKkSpriteSheet);
 
     if (kkSpriteSheetLoadCancel.load()) {
       kkSpriteSheetLoading.store(false);

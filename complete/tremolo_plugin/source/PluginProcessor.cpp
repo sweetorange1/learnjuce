@@ -392,14 +392,14 @@ int PluginProcessor::getBpmDivisionIndex() const noexcept {
 
 void PluginProcessor::setXYSkinId(tremolo::defaults::XYSkinId skin) noexcept {
   const int minId = static_cast<int>(tremolo::defaults::XYSkinId::BT);
-  const int maxId = static_cast<int>(tremolo::defaults::XYSkinId::GZY);
+  const int maxId = static_cast<int>(tremolo::defaults::XYSkinId::KK);
   const int v = juce::jlimit(minId, maxId, static_cast<int>(skin));
   xySkinId.store(v, std::memory_order_relaxed);
 }
 
 tremolo::defaults::XYSkinId PluginProcessor::getXYSkinId() const noexcept {
   const int minId = static_cast<int>(tremolo::defaults::XYSkinId::BT);
-  const int maxId = static_cast<int>(tremolo::defaults::XYSkinId::GZY);
+  const int maxId = static_cast<int>(tremolo::defaults::XYSkinId::KK);
   const int v = juce::jlimit(minId, maxId, xySkinId.load(std::memory_order_relaxed));
   return static_cast<tremolo::defaults::XYSkinId>(v);
 }

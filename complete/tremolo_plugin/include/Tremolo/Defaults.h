@@ -182,10 +182,10 @@ inline constexpr std::array<SkinTriggerFrameSpan, 16> gzyTriggerFrameProgram = {
 
 // KK：一张sprite sheet（帧数待定），每次触发播放一段（往复）
 inline constexpr std::array<SkinTriggerFrameSpan, 4> kkTriggerFrameProgram = {
-    SkinTriggerFrameSpan{0, 15},
-    SkinTriggerFrameSpan{15, 30},
-    SkinTriggerFrameSpan{30, 15},
-    SkinTriggerFrameSpan{15, 0},
+    SkinTriggerFrameSpan{0, 53},
+    SkinTriggerFrameSpan{53, 94},
+    SkinTriggerFrameSpan{94, 53},
+    SkinTriggerFrameSpan{53, 0},
 };
 
 // 兼容旧配置（过去用fps表示）：建议新代码改用 *FrameDurationSec

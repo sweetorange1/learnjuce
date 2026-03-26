@@ -245,6 +245,28 @@ private:
   void setGzyFrameIndex(int newIndex);
   void beginLoadGzySpriteSheetAsync();
   void consumeGzySpriteSheetIfReady();
+
+  // ====== KK ======
+  bool kkFrameAnimActive{false};
+  int kkFrameIndex{0};
+  double kkFrameTimeAccSec{0.0};
+  juce::Image kkSpriteSheet;
+  int kkTriggerProgramIndex{0};
+  int kkTriggerStep{+1};
+  int kkTriggerEndFrame{0};
+
+  std::atomic<bool> kkSpriteSheetLoading{false};
+  std::atomic<bool> kkSpriteSheetLoadCancel{false};
+  std::atomic<bool> kkSpriteSheetReady{false};
+  std::thread kkSpriteSheetLoadThread;
+  std::mutex kkSpriteSheetMutex;
+  juce::Image kkSpriteSheetStaged;
+
+  void startKkFrameAnimation();
+  void stopKkFrameAnimation();
+  void setKkFrameIndex(int newIndex);
+  void beginLoadKkSpriteSheetAsync();
+  void consumeKkSpriteSheetIfReady();
 };
 
 }  // namespace tremolo
